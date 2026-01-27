@@ -8,7 +8,7 @@ st.set_page_config(page_title="Cell Wars: Immune Defense", layout="wide")
 GITHUB_USER = "Kuaan"
 GITHUB_REPO = "Cell_Wars"
 SERVER_URL = "https://cell-wars.onrender.com"
-ASSETS_BASE = f"https://raw.githubusercontent.com/{{GITHUB_USER}}/{{GITHUB_REPO}}/main/assets/"
+ASSETS_BASE = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/assets/"
 
 st.markdown("""
     <style>
