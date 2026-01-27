@@ -1,3 +1,59 @@
+# --- 獨立物件設定檔 (Configuration) ---
+
+# 玩家細胞的三種型態
+CELL_CONFIG = {
+    1: { # 綠色細胞 (均衡型)
+        "name": "Soldier",
+        "hp": 5,
+        "speed": 10,       # 移動速度
+        "bullet_speed": 15,
+        "damage": 1,       # 子彈傷害
+        "color": "#50fa7b" # 綠色
+    },
+    2: { # 藍色細胞 (速度型 - 攻擊低但跑得快)
+        "name": "Scout",
+        "hp": 3,
+        "speed": 16,       # 跑超快
+        "bullet_speed": 20,
+        "damage": 1,
+        "color": "#8be9fd" # 藍色
+    },
+    3: { # 紅色細胞 (重裝型 - 跑得慢但皮厚痛)
+        "name": "Tank",
+        "hp": 8,           # 血超厚
+        "speed": 6,        # 跑得慢
+        "bullet_speed": 12,
+        "damage": 2,       # 一槍兩滴血
+        "color": "#ff5555" # 紅色
+    }
+}
+
+# 病毒的三種型態
+VIRUS_CONFIG = {
+    1: { # 紫色病毒 (雜魚)
+        "hp": 1,
+        "speed": 3,
+        "size": 30,
+        "score": 10,
+        "prob": 0.7  # 出現機率 70%
+    },
+    2: { # 綠色病毒 (快速衝撞者)
+        "hp": 2,
+        "speed": 7,  # 衝很快
+        "size": 25,  # 體積小
+        "score": 25,
+        "prob": 0.2  # 出現機率 20%
+    },
+    3: { # 魔王病毒 (Boss)
+        "hp": 15,
+        "speed": 2,  # 慢慢壓境
+        "size": 60,  # 超大隻
+        "score": 100,
+        "prob": 0.1  # 出現機率 10%
+    }
+}
+
+
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -41,23 +97,30 @@ async def game_loop():
         total_score = sum(p['score'] for p in game_state["players"].values())
 
         # 1. 敵人生成邏輯
+        # ... 在 game_loop 裡面 ...
         if len(game_state["enemies"]) < MAX_ENEMIES:
             eid = str(uuid.uuid4())
-            # 判斷是否生成魔王 (總分 > 500 且 20% 機率)
-            if total_score >= 500 and random.random() < 0.2:
-                v_type = 3
-                hp = 10
-            else:
-                v_type = random.randint(1, 2)
-                hp = 1
+            
+            # 根據機率決定生成哪種病毒
+            rand_val = random.random()
+            if total_score >= 500 and random.random() < 0.2: v_type = 3     # 20% 機率 Boss
+            elif rand_val < 0.3: v_type = 2   # 20% 機率 衝撞怪
+            else: v_type = 1                  # 剩下是雜魚
+            
+            stats = VIRUS_CONFIG[v_type]
             
             game_state["enemies"][eid] = {
-                "x": random.randint(0, MAP_WIDTH - (BOSS_SIZE if v_type == 3 else CELL_SIZE)),
-                "y": random.randint(-100, 0), # 從畫面外上方出現
+                "x": random.randint(0, MAP_WIDTH - stats["size"]),
+                "y": random.randint(-100, 0),
                 "type": v_type,
-                "hp": hp,
+                "hp": stats["hp"],
+                "max_hp": stats["hp"],
+                "speed": stats["speed"], # 寫入個別速度
+                "size": stats["size"],   # 寫入個別大小
+                "score": stats["score"],
                 "move_timer": 0
             }
+
 
         # 2. 子彈邏輯
         active_bullets = []
@@ -144,13 +207,20 @@ async def connect(sid, environ):
 @sio.event
 async def join_game(sid, data):
     name = data.get("name", "Cell")[:10]
+    
+    # 隨機分配一種細胞類型 (1~3)
+    skin_type = random.randint(1, 3)
+    stats = CELL_CONFIG[skin_type] # 讀取上面的設定檔
+    
     game_state["players"][sid] = {
         "x": random.randint(100, 500),
         "y": 400,
         "dir": "up",
         "name": name,
-        "skin": random.randint(1, 3), # 隨機分配三種細胞之一
-        "hp": 3,
+        "skin": skin_type,  # 記住是什麼皮
+        "type_stats": stats, # 把整個能力值存進去，方便後面用
+        "hp": stats["hp"],
+        "max_hp": stats["hp"], # 用來算血條比例
         "score": 0
     }
 
@@ -163,11 +233,21 @@ async def disconnect(sid):
 async def move(sid, data):
     if sid in game_state["players"]:
         p = game_state["players"][sid]
-        p['x'] += data.get('dx', 0)
-        p['y'] += data.get('dy', 0)
-        p['dir'] = data.get('dir', 'up')
-        p['x'] = max(0, min(MAP_WIDTH - CELL_SIZE, p['x']))
-        p['y'] = max(0, min(MAP_HEIGHT - CELL_SIZE, p['y']))
+        direction = data.get('dir', 'up')
+        p['dir'] = direction
+        
+        # 從設定檔讀取該玩家的速度
+        speed = p['type_stats']['speed']
+        
+        # 伺服器自己計算位移 (防作弊也更準確)
+        if direction == 'up': p['y'] -= speed
+        if direction == 'down': p['y'] += speed
+        if direction == 'left': p['x'] -= speed
+        if direction == 'right': p['x'] += speed
+
+        # 邊界限制
+        p['x'] = max(0, min(MAP_WIDTH - 30, p['x']))
+        p['y'] = max(0, min(MAP_HEIGHT - 30, p['y']))
 
 @sio.event
 async def shoot(sid):
