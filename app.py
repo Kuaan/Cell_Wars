@@ -5,9 +5,9 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Cell Wars: Immune Defense", layout="wide")
 
 # 修改為你的資訊
-GITHUB_USER = "Kuaan"
-GITHUB_REPO = "Cell_Wars"
-SERVER_URL = "https://cell-wars.onrender.com"
+GITHUB_USER = "你的GitHub帳號"
+GITHUB_REPO = "你的專案名稱"
+SERVER_URL = "https://你的後端名稱.onrender.com"
 ASSETS_BASE = f"https://raw.githubusercontent.com/{{GITHUB_USER}}/{{GITHUB_REPO}}/main/assets/"
 
 st.markdown("""
