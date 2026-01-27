@@ -15,7 +15,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-SERVER_URL = "http://localhost:8000"
+SERVER_URL = "https://cell-wars.onrender.com"
+#SERVER_URL = "http://localhost:8000" //for local test
 
 html_code = f"""
 <!DOCTYPE html>
