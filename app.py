@@ -1,4 +1,4 @@
-SERVER_URL = "https://cell-wars.onrender.com"
+
 # app.py (Cell Wars Theme)
 import streamlit as st
 import streamlit.components.v1 as components
@@ -15,11 +15,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🦠 Cell Wars: 免疫大作戰")
-st.caption("消滅入侵的病毒！(手機優化版)")
+st.title("🦠 Cell Wars")
+st.caption("Eliminate all viruses!")
 
 # --- 重要：請填入你的 Render 伺服器網址 ---
-SERVER_URL = "https://你的Render網址.onrender.com" 
+SERVER_URL = "https://cell-wars.onrender.com" 
 # ---------------------------------------
 
 html_code = f"""
