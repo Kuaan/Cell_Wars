@@ -124,22 +124,34 @@ async def startup_event():
     asyncio.create_task(game_loop())
 
 
+# 玩家狀態結構新增 "name"
+# game_state["players"] = {sid: {x, y, dir, color, hp, score, name}}
+
 @sio.event
 async def connect(sid, environ):
-    print(f"玩家 {sid} 加入")
+    print(f"連線中: {sid}")
+
+@sio.event
+async def join_game(sid, data):
+    """當玩家在前端輸入名稱後觸發"""
+    name = data.get("name", "Anony").strip()[:10]
+    if not name: name = "Cell"
+    
     game_state["players"][sid] = {
         "x": random.randint(100, 500),
         "y": 400,
         "dir": "up",
-        "color": f'rgb({random.randint(50, 255)}, {random.randint(50, 255)}, 255)',
+        "name": name,
+        "color": f'rgb({random.randint(100, 255)}, {random.randint(100, 255)}, 100)',
         "hp": 3,
         "score": 0
     }
-
+    print(f"玩家 {name} ({sid}) 正式加入戰場")
 
 @sio.event
 async def disconnect(sid):
     if sid in game_state["players"]:
+        print(f"玩家 {game_state['players'][sid]['name']} 離開")
         del game_state["players"][sid]
 
 
