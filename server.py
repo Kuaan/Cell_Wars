@@ -38,13 +38,17 @@ def check_collision(rect1, rect2, size1, size2):
 # --- 核心：遊戲主迴圈 (Game Loop) ---
 async def game_loop():
     while True:
-        # 1. 生成敵人 (如果太少)
+        # 生成敵人邏輯
         if len(game_state["enemies"]) < MAX_ENEMIES:
             eid = str(uuid.uuid4())
+            # 隨機前兩種病毒 (virus_1 或 virus_2)
+            v_type = random.randint(1, 2) 
+            # 如果想加入解鎖機制，可以根據分數決定是否出現 v_type = 3
+            
             game_state["enemies"][eid] = {
                 "x": random.randint(0, MAP_WIDTH - TANK_SIZE),
-                "y": random.randint(0, 100),  # 敵人從上方出生
-                "dir": "down",
+                "y": random.randint(0, 100),
+                "type": v_type, # 紀錄病毒種類
                 "hp": 1,
                 "move_timer": 0
             }
@@ -133,16 +137,12 @@ async def connect(sid, environ):
 
 @sio.event
 async def join_game(sid, data):
-    """當玩家在前端輸入名稱後觸發"""
-    name = data.get("name", "Anony").strip()[:10]
-    if not name: name = "Cell"
-    
+    name = data.get("name", "Cell")[:10]
     game_state["players"][sid] = {
         "x": random.randint(100, 500),
         "y": 400,
-        "dir": "up",
         "name": name,
-        "color": f'rgb({random.randint(100, 255)}, {random.randint(100, 255)}, 100)',
+        "skin": random.randint(1, 3), # 隨機分配 1, 2, 3 號細胞
         "hp": 3,
         "score": 0
     }
