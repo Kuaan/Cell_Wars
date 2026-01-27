@@ -187,8 +187,12 @@ async def shoot(sid):
 
 @app.get("/")
 async def index():
-    return {"status": "Cell Wars Server is Running", "active_players": len(game_state["players"])}
+    return {
+        "status": "Cell Wars Server is Running", 
+        "players": len(game_state["players"]),
+        "enemies": len(game_state["enemies"])
+    }
 
-# 確保這行在最後面
-if __name__ == "__main__":
-    # 加上 log_level 幫助除錯
+# --- 關鍵：Procfile 必須指向這個變數 ---
+# 確保這行在檔案最下方，這樣 app 裡的路由才會被包進去
+sio_app = socketio.ASGIApp(sio, app)
