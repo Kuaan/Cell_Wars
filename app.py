@@ -97,16 +97,16 @@ html_code = f"""
         const statusDiv = document.getElementById('status');
         
         let gameState = {{ players: {{}}, enemies: {{}}, bullets: [] }};
-        const TANK_SIZE = 30; # 這裡的大小要跟圖片匹配
+        const TANK_SIZE = 30; // 這裡的大小要跟圖片匹配
 
         // --- 1. 圖片預加載區域 ---
         const cellImg = new Image();
-        # 這裡使用 Base64 範例圖片 (一個綠色像素細胞)
-        # 你可以替換成你自己的圖片網址，例如: cellImg.src = "https://你的圖床/cell.png";
+        // 這裡使用 Base64 範例圖片 (一個綠色像素細胞)
+        // 你可以替換成你自己的圖片網址，例如: cellImg.src = "https://你的圖床/cell.png";
         cellImg.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAAAXNSR0IArs4c6QAAAMZJREFUSEvtlssNgzAMRKnTSh2WQapMwSAdpB2kY5QO0mFaRkGqjJLaD3WCIj+2UaRIkSIF+XwsX5yF8a8P7w/r0b559k6B3IB7cO/BvQf/z4G7e7e6h9c2v04tF/Cqqr5P+9U5R76eI+ec47332FpblmVJv2tG7sDjnH9i995jGAbW/e4IuQHP84yqqrDGYBiG+3jXjNyA11qRZZn2rEbbthgE4f5O5+H6t2x+g94R+q/grbUoigLDMJAX3916F27A27bFkiTwPA95nr+qP2rWwV9eFwAAAABJRU5ErkJggg==";
 
         const virusImg = new Image();
-        # 這裡使用 Base64 範例圖片 (一個紫色像素病毒)
+        // 這裡使用 Base64 範例圖片 (一個紫色像素病毒)
         virusImg.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAAAXNSR0IArs4c6QAAAL5JREFUSEvlldENwyAMRCkdJcOUYRKGyRhlmIxShskwZZQ6/aHaqhIgX5UqqUIi8fEZf7gU/rR6D4vO8e3ZPgXqBtyDe4/m+zlwL+9e9/DahutUvYBXjTEdU9+dc+Tri/i+b8g5h3MOaZoQx7F8d8zYgddaf2Kvqqqq0PZ7ImYDnmUZdV2jjUEf8a4ZuwFvtyLLMvR5NUqSBGEY/n/D6bj+PZrfod+F7q1F0zSw1iLPo7v1duEGfLsVjDEIggB5nre6P2rbB/9+S6q0AAAAAElFTkSuQmCC";
 
         let imagesLoaded = false;
