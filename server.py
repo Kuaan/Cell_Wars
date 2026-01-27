@@ -185,5 +185,10 @@ async def shoot(sid):
             "owner": sid
         })
 
+@app.get("/")
+async def index():
+    return {"status": "Cell Wars Server is Running", "active_players": len(game_state["players"])}
+
+# 確保這行在最後面
 if __name__ == "__main__":
-    uvicorn.run("server:sio_app", host="0.0.0.0", port=8000)
+    # 加上 log_level 幫助除錯
