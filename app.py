@@ -1,12 +1,12 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Cell Wars", layout="wide")
+st.set_page_config(page_title="Cell Wars 2.0", layout="wide")
 
 # --- 設定區 ---
 GITHUB_USER = "Kuaan"
 GITHUB_REPO = "Cell_Wars"
-SERVER_URL = "https://cell-wars.onrender.com"  # 你的 Render 網址
+SERVER_URL = "https://cell-wars.onrender.com"
 ASSETS_BASE = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/assets/"
 
 st.markdown("""
@@ -22,111 +22,161 @@ html_code = f"""
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
         body {{ 
             background-color: #0d0211; color: #fff; margin: 0; 
             font-family: 'Courier New', monospace; overflow: hidden; 
             display: flex; flex-direction: column; align-items: center;
-        }}
-        #top-bar {{
-            width: 100%; background: #1a0620; padding: 8px 0;
-            display: flex; justify-content: center; gap: 15px;
-            border-bottom: 1px solid #bd93f9; font-size: 14px;
-        }}
-        .score-pill {{ 
-            background: rgba(189, 147, 249, 0.2); 
-            padding: 4px 10px; 
-            border-radius: 12px; 
-            display: flex; align-items: center;
-        }}
-        /* 第一名的特殊樣式 */
-        .rank-1 {{
-            font-weight: bold;
-            color: #ffd700; /* 金色 */
-            border: 1px solid #ffd700;
-            background: rgba(255, 215, 0, 0.15);
+            touch-action: none; /* 禁止瀏覽器預設滑動 */
         }}
         
+        #top-bar {{
+            width: 100%; background: #1a0620; padding: 5px 0;
+            display: flex; justify-content: center; gap: 10px;
+            border-bottom: 1px solid #bd93f9; font-size: 12px;
+            z-index: 10;
+        }}
+        .score-pill {{ background: rgba(189, 147, 249, 0.2); padding: 2px 8px; border-radius: 10px; }}
+        
+        canvas {{ 
+            background-color: #000; border: 2px solid #444; 
+            width: 95vw; max-width: 600px; height: auto; aspect-ratio: 6/5;
+            image-rendering: pixelated; margin-top: 5px;
+        }}
+
+        /* 登入畫面 */
         #login-overlay {{
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(13, 2, 17, 0.95); z-index: 100; 
             display: flex; flex-direction: column; align-items: center; justify-content: center;
         }}
-        
-        canvas {{ 
-            background-color: #000; border: 2px solid #444; 
-            width: 95vw; max-width: 600px; height: auto; aspect-ratio: 6/5;
-            image-rendering: pixelated; margin-top: 10px;
+
+        /* UI 控制區 - 改為絕對定位覆蓋在畫布下方 */
+        #ui-container {{
+            position: relative;
+            width: 95vw; max-width: 600px;
+            height: 180px;
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }}
-        
-        #ui-controls {{ width: 100%; max-width: 400px; display: flex; justify-content: space-around; padding: 10px; }}
-        .btn {{ width: 55px; height: 55px; background: #333; border: 1px solid #555; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; user-select: none; }}
-        .btn:active {{ background: #666; }}
-        .btn-fire {{ background: #ff5555; width: 70px; height: 70px; border-radius: 50%; font-weight: bold; border: 2px solid #ff9999; }}
-        .btn-fire:active {{ background: #ff0000; }}
+
+        /* 左側搖桿區 */
+        #joystick-zone {{
+            width: 150px; height: 150px;
+            position: relative;
+        }}
+
+        /* 右側按鈕區 */
+        #actions-zone {{
+            display: flex; flex-direction: column; align-items: center; gap: 15px;
+            padding-right: 20px;
+        }}
+
+        .btn-fire {{
+            width: 70px; height: 70px; background: #ff5555; 
+            border-radius: 50%; border: 3px solid #ff9999;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; user-select: none;
+        }}
+        .btn-fire:active {{ background: #ff0000; transform: scale(0.95); }}
+
+        .btn-skill {{
+            width: 50px; height: 50px; background: #8be9fd; 
+            border-radius: 50%; border: 3px solid #cyan;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: bold; color: #000;
+            user-select: none; transition: 0.3s;
+        }}
+        .btn-skill.disabled {{ filter: grayscale(100%); opacity: 0.5; }}
+        .btn-skill:active {{ transform: scale(0.95); }}
+
+        /* 充能燈條 */
+        #charge-bar {{ display: flex; gap: 5px; margin-bottom: 5px; }}
+        .charge-dot {{ width: 10px; height: 10px; border-radius: 50%; background: #333; border: 1px solid #555; }}
+        .charge-dot.active {{ background: #f1fa8c; box-shadow: 0 0 5px #f1fa8c; border-color: #fff; }}
+
     </style>
 </head>
 <body>
 
     <div id="login-overlay">
-        <h1 style="color: #50fa7b;">🦠 CELL WARS</h1>
-        <input type="text" id="name-input" placeholder="Enter Name" maxlength="8" style="padding:10px; font-size:16px; text-align:center; border-radius:5px; border:none;">
-        <br>
-        <button id="start-btn" style="padding:10px 30px; background:#50fa7b; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:16px;">START GAME</button>
+        <h1 style="color: #50fa7b;">🦠 CELL WARS 2.0</h1>
+        <input type="text" id="name-input" placeholder="Enter Name" maxlength="8" style="padding:10px; text-align:center;">
+        <br><button id="start-btn" style="padding:10px 30px; background:#50fa7b; border:none; border-radius:5px; font-weight:bold;">START</button>
     </div>
 
     <div id="top-bar">
-        <div id="lb-content" style="display:flex; gap:10px;">Waiting for players...</div>
+        <div id="lb-content">Connecting...</div>
     </div>
 
     <canvas id="gameCanvas" width="600" height="500"></canvas>
     
-    <div id="ui-controls">
-        <div style="display: grid; grid-template-columns: repeat(3, 55px); gap: 5px;">
-            <div class="btn" style="grid-column: 2" id="up">▲</div>
-            <div class="btn" style="grid-column: 1; grid-row: 2" id="left">◀</div>
-            <div class="btn" style="grid-column: 3; grid-row: 2" id="right">▶</div>
-            <div class="btn" style="grid-column: 2; grid-row: 3" id="down">▼</div>
+    <div id="ui-container">
+        <div id="joystick-zone"></div>
+
+        <div id="actions-zone">
+            <div id="charge-bar">
+                <div class="charge-dot" id="c1"></div>
+                <div class="charge-dot" id="c2"></div>
+                <div class="charge-dot" id="c3"></div>
+            </div>
+            
+            <div style="display:flex; gap:20px; align-items:flex-end;">
+                <div class="btn-skill disabled" id="skill-btn">SKILL</div>
+                <div class="btn-fire" id="fire-btn">FIRE</div>
+            </div>
         </div>
-        <div class="btn btn-fire" id="fire">FIRE</div>
     </div>
 
     <script>
-        const socket = io("{SERVER_URL}", {{
-            reconnectionAttempts: 5,
-            timeout: 10000
-        }});
-        
+        const socket = io("{SERVER_URL}", {{ reconnection: true }});
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const assetsBase = "{ASSETS_BASE}";
         
-        // 載入圖片 (含錯誤處理)
+        // 圖片載入
         const skins = {{ cells: [], viruses: [] }};
         function loadImg(path) {{
-            let img = new Image();
-            img.src = path;
+            let img = new Image(); img.src = path;
             img.onerror = () => {{ img.isBroken = true; }};
             return img;
         }}
-
         for(let i=1; i<=3; i++) {{
             skins.cells.push(loadImg(assetsBase + "cell_" + i + ".png"));
             skins.viruses.push(loadImg(assetsBase + "virus_" + i + ".png"));
         }}
 
-        let gameState = {{ players: {{}}, enemies: {{}}, bullets: [] }};
+        let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], skill_objects: [] }};
         let myId = null;
 
-        // --- Socket 連線 ---
-        socket.on('connect', () => {{
-            myId = socket.id;
-            // 不再顯示 Connect ID
+        // --- 搖桿設定 (Nipple.js) ---
+        const manager = nipplejs.create({{
+            zone: document.getElementById('joystick-zone'),
+            mode: 'static',
+            position: {{left: '50%', top: '50%'}},
+            color: 'white',
+            size: 100
         }});
 
-        // --- 登入邏輯 ---
+        // 搖桿移動事件
+        manager.on('move', (evt, data) => {{
+            if(data.vector) {{
+                // 發送向量 (x, y) 範圍 -1 ~ 1
+                socket.emit('move', {{ dx: data.vector.x, dy: -data.vector.y }});
+            }}
+        }});
+        manager.on('end', () => {{
+            socket.emit('move', {{ dx: 0, dy: 0 }}); // 停止移動
+        }});
+
+        // --- 登入與 Socket ---
+        socket.on('connect', () => {{ myId = socket.id; }});
+        
         document.getElementById('start-btn').onclick = () => {{
-            const name = document.getElementById('name-input').value.trim() || "Cell";
+            const name = document.getElementById('name-input').value.trim() || "Hero";
             socket.emit('join_game', {{ name: name }});
             document.getElementById('login-overlay').style.display = 'none';
         }};
@@ -134,101 +184,120 @@ html_code = f"""
         socket.on('state_update', (data) => {{
             gameState = data;
             requestAnimationFrame(draw);
-            
-            // --- 修改 2: 排行榜優化 ---
-            const sorted = Object.values(gameState.players).sort((a,b)=>b.score-a.score).slice(0,3);
-            const lbHtml = sorted.map((p, index) => {{
-                // 如果是第一名 (index == 0)，加上特殊樣式和皇冠
-                let crown = (index === 0) ? "👑 " : "";
-                let cssClass = (index === 0) ? "score-pill rank-1" : "score-pill";
-                return `<span class="${{cssClass}}">${{crown}}${{p.name}}: ${{p.score}}</span>`;
-            }}).join('');
-            document.getElementById('lb-content').innerHTML = lbHtml || "No players";
+            updateUI();
         }});
+
+        function updateUI() {{
+            // 更新排行榜
+            const sorted = Object.values(gameState.players).sort((a,b)=>b.score-a.score).slice(0,3);
+            const lbHtml = sorted.map((p, i) => `<span class="score-pill">${{i==0?'👑':''}}${{p.name}}:${{p.score}}</span>`).join('');
+            document.getElementById('lb-content').innerHTML = lbHtml;
+
+            // 更新技能按鈕狀態
+            if (myId && gameState.players[myId]) {{
+                const me = gameState.players[myId];
+                // 更新燈號
+                for(let i=1; i<=3; i++) {{
+                    document.getElementById('c'+i).classList.toggle('active', me.charge >= i);
+                }}
+                // 更新按鈕外觀 (有能量且不在冷卻中)
+                // 這裡簡單判定: 有能量就亮起 (冷卻由後端擋)
+                const btn = document.getElementById('skill-btn');
+                if (me.charge >= 1) btn.classList.remove('disabled');
+                else btn.classList.add('disabled');
+            }}
+        }}
 
         function draw() {{
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 畫敵人
+            // 1. 畫技能分身 (半透明)
+            ctx.globalAlpha = 0.6;
+            if (gameState.skill_objects) {{
+                gameState.skill_objects.forEach(obj => {{
+                    // 畫一個發光的球
+                    ctx.beginPath();
+                    ctx.arc(obj.x, obj.y, 15, 0, Math.PI*2);
+                    ctx.fillStyle = "#8be9fd";
+                    ctx.fill();
+                    ctx.strokeStyle = "white";
+                    ctx.stroke();
+                }});
+            }}
+            ctx.globalAlpha = 1.0;
+
+            // 2. 畫敵人
             for (let id in gameState.enemies) {{
                 let e = gameState.enemies[id];
                 let isBoss = (e.type === 3);
-                let size = isBoss ? 50 : 30;
                 let img = skins.viruses[(e.type || 1) - 1];
                 
-                if(img && img.complete && !img.isBroken && img.naturalWidth !== 0) {{
-                    ctx.drawImage(img, e.x, e.y, size, size);
+                if(img && img.complete && !img.isBroken && img.naturalWidth!==0) {{
+                    ctx.drawImage(img, e.x, e.y, e.size, e.size);
                 }} else {{
-                    ctx.fillStyle = isBoss ? "purple" : "red";
-                    ctx.fillRect(e.x, e.y, size, size);
+                    ctx.fillStyle = isBoss?"purple":"red"; ctx.fillRect(e.x, e.y, e.size, e.size);
                 }}
-                // 敵人血條
-                ctx.fillStyle = "#444"; ctx.fillRect(e.x, e.y - 8, size, 4);
-                ctx.fillStyle = "#ff5555"; ctx.fillRect(e.x, e.y - 8, size * (e.hp/(isBoss?10:1)), 4);
+                
+                // 敵人血條 (頭頂)
+                ctx.fillStyle = "#555"; ctx.fillRect(e.x, e.y-8, e.size, 4);
+                ctx.fillStyle = "#ff5555"; ctx.fillRect(e.x, e.y-8, e.size * (e.hp/e.max_hp), 4);
             }}
 
-            // 畫玩家
+            // 3. 畫玩家
             for (let id in gameState.players) {{
                 let p = gameState.players[id];
                 let img = skins.cells[(p.skin || 1) - 1];
                 
-                if(img && img.complete && !img.isBroken && img.naturalWidth !== 0) {{
+                if(img && img.complete && !img.isBroken && img.naturalWidth!==0) {{
                     ctx.drawImage(img, p.x, p.y, 30, 30);
                 }} else {{
-                    ctx.fillStyle = p.color || "#50fa7b";
-                    ctx.fillRect(p.x, p.y, 30, 30);
+                    ctx.fillStyle = p.stats.color; ctx.fillRect(p.x, p.y, 30, 30);
                 }}
                 
-                // --- 修改 1: 移除黃色框框，改用名字顏色區分 ---
-                ctx.font = "12px monospace"; 
-                ctx.textAlign = "center";
-                
-                if (id === myId) {{
-                    ctx.fillStyle = "#f1fa8c"; // 自己：淡黃色名字
-                    // ctx.strokeRect(...) <--- 已移除
-                }} else {{
-                    ctx.fillStyle = "white"; // 別人：白色名字
-                }}
+                // 名字
+                ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
+                ctx.font = "12px Arial"; ctx.textAlign = "center";
                 ctx.fillText(p.name, p.x+15, p.y-15);
-                
-                // 玩家血條
-                ctx.fillStyle="#50fa7b"; ctx.fillRect(p.x, p.y-10, 30*(p.hp/3), 3);
+
+                // --- 修正 6: 玩家血條與身寬一樣 (30px) ---
+                ctx.fillStyle = "#444"; ctx.fillRect(p.x, p.y-10, 30, 4);
+                ctx.fillStyle = "#50fa7b"; ctx.fillRect(p.x, p.y-10, 30 * (p.hp / p.max_hp), 4);
             }}
 
-            // 畫子彈
+            // 4. 畫子彈
             ctx.fillStyle = '#8be9fd';
             gameState.bullets.forEach(b => {{
                 ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
             }});
         }}
 
-        // --- 控制 ---
-        const move = (dir) => {{
-            let dx=0, dy=0;
-            if(dir==='up') dy=-15; if(dir==='down') dy=15;
-            if(dir==='left') dx=-15; if(dir==='right') dx=15;
-            socket.emit('move', {{dx, dy, dir}});
-        }};
-
-        const bind = (id, dir) => {{ 
-            const el = document.getElementById(id);
-            const handler = (e) => {{ e.preventDefault(); move(dir); }};
-            el.addEventListener('touchstart', handler);
-            el.addEventListener('mousedown', handler);
-        }};
-        bind('up','up'); bind('down','down'); bind('left','left'); bind('right','right');
+        // --- 綁定按鈕 ---
+        const fireBtn = document.getElementById('fire-btn');
+        const skillBtn = document.getElementById('skill-btn');
         
-        const fireBtn = document.getElementById('fire');
-        const fireHandler = (e) => {{ e.preventDefault(); socket.emit('shoot'); }};
-        fireBtn.addEventListener('touchstart', fireHandler);
-        fireBtn.addEventListener('mousedown', fireHandler);
+        // 為了支援連發，使用 interval
+        let fireInterval;
+        const startFire = (e) => {{ 
+            e.preventDefault(); 
+            socket.emit('shoot');
+            fireInterval = setInterval(()=>socket.emit('shoot'), 250); 
+        }};
+        const stopFire = () => clearInterval(fireInterval);
 
+        fireBtn.addEventListener('touchstart', startFire);
+        fireBtn.addEventListener('touchend', stopFire);
+        fireBtn.addEventListener('mousedown', startFire);
+        fireBtn.addEventListener('mouseup', stopFire);
+
+        // 技能按鈕
+        const castSkill = (e) => {{ e.preventDefault(); socket.emit('use_skill'); }};
+        skillBtn.addEventListener('touchstart', castSkill);
+        skillBtn.addEventListener('mousedown', castSkill);
+
+        // 鍵盤支援 (測試用)
         document.addEventListener('keydown', (e) => {{
-            if (e.key === 'ArrowUp' || e.key === 'w') move('up');
-            if (e.key === 'ArrowDown' || e.key === 's') move('down');
-            if (e.key === 'ArrowLeft' || e.key === 'a') move('left');
-            if (e.key === 'ArrowRight' || e.key === 'd') move('right');
             if (e.code === 'Space') socket.emit('shoot');
+            if (e.key === 'q') socket.emit('use_skill');
         }});
     </script>
 </body>
