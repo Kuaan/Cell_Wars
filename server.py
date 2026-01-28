@@ -155,7 +155,7 @@ async def game_loop():
                                 player['x'] = random.randint(100, 500)
                                 player['y'] = 400
                                 player['hp'] = 3
-                                player['score'] = max(0, player['score'] - 20)
+                                player['score'] = max(0, player['score']/2)
                             break
                 if not hit:
                     active_bullets.append(b)
