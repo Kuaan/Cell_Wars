@@ -31,14 +31,14 @@ CELL_CONFIG = {
 # 病毒的三種型態
 VIRUS_CONFIG = {
     1: { # 紫色病毒 (雜魚)
-        "hp": 1,
+        "hp": 3,
         "speed": 3,
         "size": 30,
         "score": 10,
         "prob": 0.7  # 出現機率 70%
     },
     2: { # 綠色病毒 (快速衝撞者)
-        "hp": 2,
+        "hp": 1,
         "speed": 7,  # 衝很快
         "size": 25,  # 體積小
         "score": 25,
@@ -178,7 +178,8 @@ async def game_loop():
             if enemy['y'] > MAP_HEIGHT: enemy['y'] = -50
 
             # 敵人射擊頻率
-            shoot_rate = 0.08 if enemy['type'] == 3 else 0.04
+            shoot_rate = 0.02 if enemy['type'] == 3 else 0.01 #0.08/0.04
+            
             if random.random() < shoot_rate:
                 damage = 2 if enemy['type'] == 3 else 1
                 game_state["bullets"].append({
