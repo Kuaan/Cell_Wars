@@ -9,9 +9,9 @@ import time
 
 # --- 設定與參數 ---
 CELL_CONFIG = {
-    1: { "name": "Soldier", "hp": 5, "speed": 8,  "bullet_speed": 15, "damage": 1, "color": "#50fa7b" },
-    2: { "name": "Scout",   "hp": 3, "speed": 12, "bullet_speed": 20, "damage": 1, "color": "#8be9fd" },
-    3: { "name": "Tank",    "hp": 8, "speed": 5,  "bullet_speed": 12, "damage": 2, "color": "#ff5555" }
+    1: { "name": "Soldier", "hp": 5, "speed": 8,  "bullet_speed": 7, "damage": 1, "color": "#50fa7b" },
+    2: { "name": "Scout",   "hp": 3, "speed": 12, "bullet_speed": 10, "damage": 1, "color": "#8be9fd" },
+    3: { "name": "Tank",    "hp": 8, "speed": 5,  "bullet_speed": 6, "damage": 2, "color": "#ff5555" }
 }
 
 VIRUS_CONFIG = {
