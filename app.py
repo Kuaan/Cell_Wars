@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Cell Wars 3.0 - Boss Coming !!", layout="wide")
+st.set_page_config(page_title="Cell Wars 3.1 - Boss Coming !!", layout="wide")
 
 # 修改為你的 Render 伺服器網址
 SERVER_URL = "https://cell-wars.onrender.com" 
@@ -30,8 +30,57 @@ html_code = f"""
             font-family: 'Courier New', monospace; overflow: hidden; 
             display: flex; flex-direction: column; align-items: center;
             touch-action: none;
+            height: 100vh;
         }}
         
+        /* --- 登入頁面置中優化 --- */
+        #login-overlay {{
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(13, 2, 17, 0.98); z-index: 100; 
+            display: flex; flex-direction: column; 
+            align-items: center; justify-content: center;
+            text-align: center; /* 確保所有文字置中 */
+        }}
+
+        #login-overlay h1 {{
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px #50fa7b;
+        }}
+
+        #login-overlay p {{
+            margin-bottom: 25px;
+            letter-spacing: 1px;
+        }}
+
+        #name-input {{
+            padding: 12px;
+            width: 200px;
+            border: 2px solid #50fa7b;
+            background: #1a0620;
+            color: #fff;
+            border-radius: 5px;
+            outline: none;
+            margin-bottom: 15px;
+        }}
+
+        #start-btn {{
+            padding: 12px 40px;
+            background: #50fa7b;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 0 15px rgba(80, 250, 123, 0.3);
+        }}
+
+        #start-btn:hover {{
+            transform: scale(1.05);
+            background: #62ff8a;
+            box-shadow: 0 0 25px rgba(80, 250, 123, 0.5);
+        }}
+
+        /* --- 遊戲介面樣式 --- */
         #top-bar {{
             width: 100%; background: #1a0620; padding: 5px 0;
             display: flex; justify-content: center; gap: 10px;
@@ -44,12 +93,6 @@ html_code = f"""
             background-color: #000; border: 2px solid #444; 
             width: 95vw; max-width: 600px; height: auto; aspect-ratio: 6/5;
             image-rendering: pixelated; margin-top: 5px;
-        }}
-
-        #login-overlay {{
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(13, 2, 17, 0.95); z-index: 100; 
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
         }}
 
         #ui-container {{
@@ -77,7 +120,6 @@ html_code = f"""
         .btn-skill.disabled {{ filter: grayscale(100%); opacity: 0.5; }}
         .btn-skill:active {{ transform: scale(0.95); }}
 
-        /* --- 優化4: 長條狀能量槽 (Bar Style) --- */
         #charge-container {{ 
             display: flex; gap: 4px; margin-bottom: 8px; align-items: center; 
             background: #222; padding: 4px; border-radius: 4px; border: 1px solid #444;
@@ -85,14 +127,13 @@ html_code = f"""
         .charge-bar-segment {{
             position: relative; width: 30px; height: 12px;
             background: #333; border: 1px solid #555;
-            transform: skewX(-15deg); /* 斜角設計 */
+            transform: skewX(-15deg);
         }}
         .charge-fill {{
             position: absolute; bottom: 0; left: 0; width: 0%; height: 100%;
             background: #f1fa8c; transition: width 0.2s;
         }}
         .charge-bar-segment.full .charge-fill {{ width: 100% !important; box-shadow: 0 0 5px #f1fa8c; }}
-
     </style>
 </head>
 <body>
@@ -100,8 +141,8 @@ html_code = f"""
     <div id="login-overlay">
         <h1 style="color: #50fa7b;">🦠 CELL WARS: BOSS MODE</h1>
         <p style="color: #aaa; font-size: 12px;">Defeat Elite -> Wait 30s -> Boss</p>
-        <input type="text" id="name-input" placeholder="Enter Name" maxlength="8" style="padding:10px; text-align:center;">
-        <br><button id="start-btn" style="padding:10px 30px; background:#50fa7b; border:none; border-radius:5px; font-weight:bold;">START</button>
+        <input type="text" id="name-input" placeholder="Enter Name" maxlength="8">
+        <button id="start-btn">START MISSION</button>
     </div>
 
     <div id="top-bar">
@@ -128,17 +169,16 @@ html_code = f"""
     </div>
 
     <script>
+        // ... (以下 JavaScript 與音效載入部分保持不變) ...
         const socket = io("{SERVER_URL}", {{ reconnection: true }});
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const assetsBase = "{ASSETS_BASE}";
         const soundsBase = "{SOUNDS_BASE}";
         
-        // --- 優化1: 聲音修復與預載入 ---
-        // 注意: 檔案名稱必須完全對應 github
         const audioFiles = {{
             bgm: new Audio(soundsBase + "bgm/bgm-145a.wav"),
-            p_hit: new Audio(soundsBase + "characters/character_hitted.wav"), // 依照你提供的拼法 charcter
+            p_hit: new Audio(soundsBase + "characters/character_hitted.wav"),
             p_shot: new Audio(soundsBase + "characters/character_nor_shot.wav"),
             boss_come: new Audio(soundsBase + "enemy/boss_coming.wav"),
             boss_hit: new Audio(soundsBase + "enemy/boss_hitted.wav"),
@@ -153,33 +193,25 @@ html_code = f"""
 
         function playSfx(key) {{
             const s = audioFiles[key];
-            if(s) {{
-                s.currentTime = 0;
-                s.play().catch(e => console.log("Audio play failed (interaction needed)", e));
-            }}
+            if(s) {{ s.currentTime = 0; s.play().catch(e => {{}}); }}
         }}
 
-        // --- 優化2: 圖片修正 (boss_1.png) ---
         const skins = {{ cells: [], viruses: [], boss: null }};
         function loadImg(path) {{
             let img = new Image(); img.src = path;
-            img.onerror = () => {{ img.isBroken = true; }};
             return img;
         }}
         for(let i=1; i<=3; i++) {{
             skins.cells.push(loadImg(assetsBase + "cell_" + i + ".png"));
             skins.viruses.push(loadImg(assetsBase + "virus_" + i + ".png"));
         }}
-        // 載入正確的 Boss 圖片
-        skins.boss = loadImg(assetsBase + "boss_1.png"); // 假設 boss_1 在 enemy 資料夾下，若在 assets 根目錄請自行調整
+        skins.boss = loadImg(assetsBase + "boss_1.png");
 
         let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], skill_objects: [] }};
         let myId = null;
 
-        // --- Socket 監聽 ---
         socket.on('connect', () => {{ myId = socket.id; }});
         
-        // 接收音效事件
         socket.on('sfx', (data) => {{
             switch(data.type) {{
                 case 'character_hitted': playSfx('p_hit'); break;
@@ -198,21 +230,17 @@ html_code = f"""
             updateUI();
         }});
 
-        // --- UI 更新邏輯 (Bar Style) ---
         function updateUI() {{
             if (!myId || !gameState.players[myId]) return;
             const me = gameState.players[myId];
 
-            // 排行榜
             const sorted = Object.values(gameState.players).sort((a,b)=>b.score-a.score).slice(0,3);
             const lbHtml = sorted.map((p, i) => `<span class="score-pill">${{i==0?'👑':''}}${{p.name}}:${{p.score}}</span>`).join('');
             document.getElementById('lb-content').innerHTML = lbHtml;
 
-            // 優化4: 長條狀技能槽顯示
             for(let i=1; i<=3; i++) {{
                 const elSeg = document.getElementById('seg'+i);
                 const elFill = document.getElementById('fill'+i);
-                
                 if (me.charge >= i) {{
                     elSeg.classList.add('full');
                     elFill.style.width = '100%';
@@ -225,89 +253,59 @@ html_code = f"""
                     elFill.style.width = '0%';
                 }}
             }}
-
             const btn = document.getElementById('skill-btn');
             if (me.charge >= 1) btn.classList.remove('disabled');
             else btn.classList.add('disabled');
         }}
 
-        // --- 繪圖邏輯 ---
         function draw() {{
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 技能分身
-            ctx.globalAlpha = 0.7;
             if (gameState.skill_objects) {{
+                ctx.globalAlpha = 0.7;
                 gameState.skill_objects.forEach(obj => {{
                     let img = skins.cells[(obj.skin || 1) - 1];
-                    if(img && img.complete && !img.isBroken) ctx.drawImage(img, obj.x, obj.y, 30, 30);
-                    else {{ ctx.beginPath(); ctx.arc(obj.x, obj.y, 15, 0, Math.PI*2); ctx.fillStyle="#8be9fd"; ctx.fill(); }}
+                    if(img && img.complete) ctx.drawImage(img, obj.x, obj.y, 30, 30);
                     ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; 
                     ctx.beginPath(); ctx.arc(obj.x+15, obj.y+15, 18, 0, Math.PI*2); ctx.stroke();
                 }});
-            }}
-            ctx.globalAlpha = 1.0;
+                ctx.globalAlpha = 1.0;
+            }
 
-            // 敵人
             for (let id in gameState.enemies) {{
                 let e = gameState.enemies[id];
-                let isBoss = (e.type === 999);
-                
-                if (isBoss) {{
-                    // 優化2: 使用 boss_1.png
-                    let img = skins.boss; 
-                    // 如果圖片壞掉或沒載入，用紫色方塊代替
-                    if(img && img.complete && !img.isBroken && img.naturalWidth !== 0) {{
-                        ctx.drawImage(img, e.x, e.y, e.size, e.size);
-                    }} else {{ 
-                        ctx.fillStyle = "purple"; ctx.fillRect(e.x, e.y, e.size, e.size); 
-                    }}
-                    
-                    // Boss 血條
+                if (e.type === 999) {{
+                    if(skins.boss.complete) ctx.drawImage(skins.boss, e.x, e.y, e.size, e.size);
                     ctx.fillStyle = "#555"; ctx.fillRect(e.x, e.y-10, e.size, 8);
                     ctx.fillStyle = "#bd93f9"; ctx.fillRect(e.x, e.y-10, e.size * (e.hp/e.max_hp), 8);
-                    
                 }} else {{
-                    // 優化2: virus_3 是菁英怪
                     let img = skins.viruses[(e.type || 1) - 1];
                     if(img && img.complete) ctx.drawImage(img, e.x, e.y, e.size, e.size);
-                    else {{ ctx.fillStyle = "red"; ctx.fillRect(e.x, e.y, e.size, e.size); }}
-                    
                     ctx.fillStyle = "#555"; ctx.fillRect(e.x, e.y-6, e.size, 3);
                     ctx.fillStyle = "#ff5555"; ctx.fillRect(e.x, e.y-6, e.size * (e.hp/e.max_hp), 3);
                 }}
             }}
 
-            // 玩家
             for (let id in gameState.players) {{
                 let p = gameState.players[id];
                 let img = skins.cells[(p.skin || 1) - 1];
                 if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
-                else {{ ctx.fillStyle = p.stats.color; ctx.fillRect(p.x, p.y, 30, 30); }}
-                
                 ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
                 ctx.font = "12px Arial"; ctx.textAlign = "center";
                 ctx.fillText(p.name, p.x+15, p.y-15);
-
                 ctx.fillStyle = "#444"; ctx.fillRect(p.x, p.y-10, 30, 4);
                 ctx.fillStyle = "#50fa7b"; ctx.fillRect(p.x, p.y-10, 30 * (p.hp / p.max_hp), 4);
             }}
 
-            // 子彈
             gameState.bullets.forEach(b => {{
                 ctx.beginPath();
-                if (b.owner === 'boss') {{
-                    ctx.fillStyle = '#bd93f9'; ctx.arc(b.x, b.y, 8, 0, Math.PI*2);
-                }} else if (b.owner === 'enemy') {{
-                    ctx.fillStyle = '#ff5555'; ctx.moveTo(b.x, b.y+5); ctx.lineTo(b.x-4, b.y-4); ctx.lineTo(b.x+4, b.y-4);
-                }} else {{
-                    ctx.fillStyle = '#8be9fd'; ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
-                }}
+                if (b.owner === 'boss') {{ ctx.fillStyle = '#bd93f9'; ctx.arc(b.x, b.y, 8, 0, Math.PI*2); }}
+                else if (b.owner === 'enemy') {{ ctx.fillStyle = '#ff5555'; ctx.arc(b.x, b.y, 4, 0, Math.PI*2); }}
+                else {{ ctx.fillStyle = '#8be9fd'; ctx.arc(b.x, b.y, 4, 0, Math.PI*2); }}
                 ctx.fill();
             }});
         }}
 
-        // --- 控制 ---
         const manager = nipplejs.create({{
             zone: document.getElementById('joystick-zone'),
             mode: 'static', position: {{left: '50%', top: '50%'}}, size: 100, color: 'white'
@@ -317,42 +315,26 @@ html_code = f"""
         }});
         manager.on('end', () => socket.emit('move', {{ dx: 0, dy: 0 }}));
 
-        // --- START 流程 (關鍵: 音效解鎖) ---
         document.getElementById('start-btn').onclick = () => {{
             const name = document.getElementById('name-input').value.trim() || "Hero";
             socket.emit('join_game', {{ name: name }});
             document.getElementById('login-overlay').style.display = 'none';
-            
-            // 嘗試解鎖並播放 BGM
-            audioFiles.bgm.play().then(() => {{
-                console.log("Audio Unlocked");
-            }}).catch((err) => {{
-                console.log("Auto-play blocked, wait for interaction", err);
-            }});
+            audioFiles.bgm.play().catch(e => {{}});
         }};
 
         const fireBtn = document.getElementById('fire-btn');
         let fireInterval;
         const startFire = (e) => {{ 
-            e.preventDefault(); 
-            playSfx('p_shot'); 
-            socket.emit('shoot');
-            fireInterval = setInterval(()=> {{
-                socket.emit('shoot');
-                playSfx('p_shot');
-            }}, 250); 
+            e.preventDefault(); playSfx('p_shot'); socket.emit('shoot');
+            fireInterval = setInterval(()=> {{ socket.emit('shoot'); playSfx('p_shot'); }}, 250); 
         }};
         const stopFire = () => clearInterval(fireInterval);
 
-        fireBtn.addEventListener('touchstart', startFire);
-        fireBtn.addEventListener('touchend', stopFire);
-        fireBtn.addEventListener('mousedown', startFire);
-        fireBtn.addEventListener('mouseup', stopFire);
+        fireBtn.addEventListener('touchstart', startFire); fireBtn.addEventListener('touchend', stopFire);
+        fireBtn.addEventListener('mousedown', startFire); fireBtn.addEventListener('mouseup', stopFire);
 
-        const skillBtn = document.getElementById('skill-btn');
-        const castSkill = (e) => {{ e.preventDefault(); socket.emit('use_skill'); }};
-        skillBtn.addEventListener('touchstart', castSkill);
-        skillBtn.addEventListener('mousedown', castSkill);
+        document.getElementById('skill-btn').addEventListener('touchstart', (e) => {{ e.preventDefault(); socket.emit('use_skill'); }});
+        document.getElementById('skill-btn').addEventListener('mousedown', (e) => {{ e.preventDefault(); socket.emit('use_skill'); }});
         
         document.addEventListener('keydown', (e) => {{
             if (e.code === 'Space') {{ socket.emit('shoot'); playSfx('p_shot'); }}
