@@ -45,7 +45,7 @@ game_state = {
     "warning_active": False 
 }
 
-# --- 數據壓縮 (修正重點：防止負血量導致前端繪圖錯誤) ---
+# --- 數據壓縮 ---
 def compress_state(state):
     compressed = {
         "players": {},
@@ -56,18 +56,19 @@ def compress_state(state):
     }
     
     for pid, p in state["players"].items():
-        # 修正: 使用 max(0, ...) 確保不會傳送負數血量
+        # 雙重保險：確保傳送給前端的 hp 不會是負數
+        safe_hp = max(0, int(p["hp"]))
         compressed["players"][pid] = {
             "x": int(p["x"]), "y": int(p["y"]), "skin": p["skin"], "name": p["name"],
-            "hp": max(0, int(p["hp"])), "max_hp": int(p["max_hp"]), "score": int(p["score"]),
+            "hp": safe_hp, "max_hp": int(p["max_hp"]), "score": int(p["score"]),
             "charge": p["charge"], "hit_accumulated": p["hit_accumulated"], "c": p["stats"]["color"]
         }
         
     for eid, e in state["enemies"].items():
-        # 修正: 使用 max(0, ...) 確保不會傳送負數血量
+        safe_hp = max(0, int(e["hp"]))
         compressed["enemies"][eid] = {
             "x": int(e["x"]), "y": int(e["y"]), "type": e["type"],
-            "size": e["size"], "hp": max(0, int(e["hp"])), "max_hp": int(e["max_hp"])
+            "size": e["size"], "hp": safe_hp, "max_hp": int(e["max_hp"])
         }
         
     for b in state["bullets"]:
@@ -215,15 +216,16 @@ async def game_loop():
                                 if eid in game_state["enemies"]: game_state["enemies"].pop(eid)
                             break
                 else:
-                    # 敵人打玩家
+                    # 敵人子彈打玩家
                     for pid, player in list(game_state["players"].items()):
                         if check_collision(b, player, b.get('size', 5), 30):
                             player['hp'] -= b.get('damage', 1)
                             await sio.emit('sfx', {'type': 'character_hitted'})
                             hit = True
                             if player['hp'] <= 0:
+                                # 玩家死亡邏輯
                                 player['x'], player['y'] = random.randint(100, 500), 400
-                                player['hp'] = 3
+                                player['hp'] = player['max_hp'] # 重置滿血
                                 player['score'] = int(player['score'] / 2)
                                 player['charge'] = 0
                                 player['hit_accumulated'] = 0
@@ -231,7 +233,7 @@ async def game_loop():
                 if not hit: active_bullets.append(b)
         game_state["bullets"] = active_bullets
 
-        # --- AI 移動 ---
+        # --- AI 移動與碰觸傷害修復 (重點修改) ---
         for eid, enemy in list(game_state["enemies"].items()):
             if enemy['type'] == 999: # Boss
                 enemy['move_timer'] += 1
@@ -243,10 +245,18 @@ async def game_loop():
                 enemy['y'] = max(0, min(MAP_HEIGHT - enemy['size'], enemy['y'] + enemy.get('dy', 0)))
 
                 for pid, player in game_state["players"].items():
+                    # Boss 碰觸玩家
                     if check_collision(player, enemy, 30, enemy['size']):
                         if random.random() < 0.05:
                             player['hp'] -= 1
                             await sio.emit('sfx', {'type': 'character_hitted'})
+                            # --- 新增: Boss 碰觸致死判斷 ---
+                            if player['hp'] <= 0:
+                                player['x'], player['y'] = random.randint(100, 500), 400
+                                player['hp'] = player['max_hp']
+                                player['score'] = int(player['score'] / 2)
+                                player['charge'] = 0
+                                player['hit_accumulated'] = 0
 
                 is_enraged = (enemy['hp'] < enemy['max_hp'] * 0.5)
                 fire_rate = 0.05 if is_enraged else 0.03
@@ -268,6 +278,21 @@ async def game_loop():
                 enemy['x'] = max(0, min(MAP_WIDTH - enemy['size'], enemy['x']))
                 if enemy['y'] > MAP_HEIGHT: enemy['y'] = -50
                 
+                # 小怪碰觸玩家 (本來沒有死亡邏輯，現在補上)
+                for pid, player in game_state["players"].items():
+                    if check_collision(player, enemy, 30, enemy['size']):
+                         # 降低小怪碰觸頻率以免秒殺，但如果碰到了扣血
+                        if random.random() < 0.1: 
+                            player['hp'] -= 1
+                            await sio.emit('sfx', {'type': 'character_hitted'})
+                            # --- 新增: 小怪碰觸致死判斷 ---
+                            if player['hp'] <= 0:
+                                player['x'], player['y'] = random.randint(100, 500), 400
+                                player['hp'] = player['max_hp']
+                                player['score'] = int(player['score'] / 2)
+                                player['charge'] = 0
+                                player['hit_accumulated'] = 0
+
                 if random.random() < 0.005:
                     game_state["bullets"].append({
                         "x": enemy['x'] + enemy['size'] / 2, "y": enemy['y'] + enemy['size'],
