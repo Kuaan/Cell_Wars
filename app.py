@@ -1,3 +1,4 @@
+#app.py
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -65,32 +66,15 @@ html_code = f"""
             image-rendering: pixelated; margin-top: 5px;
         }}
 
-        /* --- UI 容器優化：搖桿靠左，按鈕靠右 --- */
+        /* UI 容器 */
         #ui-container {{
-            width: 100%; /* 撐滿寬度以實現兩端對齊 */
-            max-width: 600px;
-            height: 180px;
-            margin-top: 10px;
-            display: flex;
-            justify-content: space-between; /* 左右分開 */
-            align-items: center;
-            padding: 0 15px; /* 側邊留一點空隙 */
+            width: 100%; max-width: 600px; height: 180px;
+            margin-top: 10px; display: flex; justify-content: space-between;
+            align-items: center; padding: 0 15px;
         }}
+        #joystick-zone {{ width: 140px; height: 140px; position: relative; }}
+        #actions-zone {{ display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }}
 
-        #joystick-zone {{ 
-            width: 140px; 
-            height: 140px; 
-            position: relative; /* 關鍵：這會作為搖桿的定位基準 */
-        }}
-
-        #actions-zone {{ 
-            display: flex; 
-            flex-direction: column; 
-            align-items: flex-end; 
-            gap: 10px; 
-        }}
-
-        /* 按鈕樣式 */
         .btn-fire {{
             width: 75px; height: 75px; background: #ff5555; border-radius: 50%;
             border: 3px solid #ff9999; display: flex; align-items: center; justify-content: center;
@@ -130,7 +114,6 @@ html_code = f"""
 
     <div id="ui-container">
         <div id="joystick-zone"></div>
-        
         <div id="actions-zone">
             <div id="charge-container">
                 <div class="charge-bar-segment" id="seg1"><div class="charge-fill" id="fill1"></div></div>
@@ -236,11 +219,15 @@ html_code = f"""
                 let e = gameState.enemies[id];
                 if (e.type === 999) {{
                     if(skins.boss.complete) ctx.drawImage(skins.boss, e.x, e.y, e.size, e.size);
-                    ctx.fillStyle = "#bd93f9"; ctx.fillRect(e.x, e.y-10, e.size * (e.hp/e.max_hp), 8);
+                    // 修正 Bug 1: 確保比率不為負數 Math.max(0, ...)
+                    const hpRatio = Math.max(0, e.hp / e.max_hp);
+                    ctx.fillStyle = "#bd93f9"; ctx.fillRect(e.x, e.y-10, e.size * hpRatio, 8);
                 }} else {{
                     let img = skins.viruses[(e.type || 1) - 1];
                     if(img && img.complete) ctx.drawImage(img, e.x, e.y, e.size, e.size);
-                    ctx.fillStyle = "#ff5555"; ctx.fillRect(e.x, e.y-6, e.size * (e.hp/e.max_hp), 3);
+                    // 修正 Bug 1: 確保比率不為負數
+                    const hpRatio = Math.max(0, e.hp / e.max_hp);
+                    ctx.fillStyle = "#ff5555"; ctx.fillRect(e.x, e.y-6, e.size * hpRatio, 3);
                 }}
             }}
 
@@ -251,7 +238,9 @@ html_code = f"""
                 if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
                 ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
                 ctx.fillText(p.name, p.x+15, p.y-15);
-                ctx.fillStyle = "#50fa7b"; ctx.fillRect(p.x, p.y-10, 30 * (p.hp / p.max_hp), 4);
+                // 修正 Bug 1: 確保比率不為負數
+                const hpRatio = Math.max(0, p.hp / p.max_hp);
+                ctx.fillStyle = "#50fa7b"; ctx.fillRect(p.x, p.y-10, 30 * hpRatio, 4);
             }}
 
             // 子彈
@@ -263,20 +252,46 @@ html_code = f"""
                 ctx.fill();
             }});
 
-            // Boss 警告
+            // 優化 2: 科技感魔王警告
             if (gameState.w) {{
-                ctx.save(); ctx.globalAlpha = 0.6; ctx.fillStyle = "yellow";
-                const cx = canvas.width / 2, cy = canvas.height / 2;
-                ctx.beginPath(); ctx.moveTo(cx, cy - 40); ctx.lineTo(cx + 40, cy + 40); ctx.lineTo(cx - 40, cy + 40);
-                ctx.closePath(); ctx.fill(); ctx.restore();
+                const time = Date.now();
+                ctx.save();
+                
+                // 全螢幕紅色呼吸警示
+                const alpha = 0.2 + 0.15 * Math.sin(time * 0.01);
+                ctx.fillStyle = `rgba(255, 0, 0, ${{alpha}})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // 掃描線
+                const scanY = (time * 0.2) % canvas.height;
+                ctx.strokeStyle = "rgba(255, 50, 50, 0.5)";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, scanY); ctx.lineTo(canvas.width, scanY);
+                ctx.moveTo(0, canvas.height - scanY); ctx.lineTo(canvas.width, canvas.height - scanY);
+                ctx.stroke();
+
+                // 閃爍文字
+                if (Math.floor(time / 250) % 2 === 0) {{
+                    ctx.translate(canvas.width/2, canvas.height/2);
+                    ctx.font = "bold 40px Courier New";
+                    ctx.fillStyle = "#ff5555";
+                    ctx.textAlign = "center";
+                    ctx.shadowColor = "red"; ctx.shadowBlur = 20;
+                    ctx.fillText("⚠ WARNING ⚠", 0, -20);
+                    
+                    ctx.font = "bold 20px Courier New";
+                    ctx.fillStyle = "#fff";
+                    ctx.fillText("BOSS APPROACHING", 0, 20);
+                }}
+                ctx.restore();
             }}
         }}
 
-        // --- 修正搖桿：靠左對齊 ---
         const manager = nipplejs.create({{
             zone: document.getElementById('joystick-zone'),
             mode: 'static',
-            position: {{ left: '70px', top: '70px' }}, // 在容器內的固定位置 (中心點)
+            position: {{ left: '70px', top: '70px' }},
             size: 100,
             color: 'white'
         }});
