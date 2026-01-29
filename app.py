@@ -138,8 +138,8 @@ html_code = f"""
         // 注意: 檔案名稱必須完全對應 github
         const audioFiles = {{
             bgm: new Audio(soundsBase + "bgm/bgm-145a.wav"),
-            p_hit: new Audio(soundsBase + "characters/charcter_hitted.wav"), // 依照你提供的拼法 charcter
-            p_shot: new Audio(soundsBase + "characters/charcter_nor_shot.wav"),
+            p_hit: new Audio(soundsBase + "characters/character_hitted.wav"), // 依照你提供的拼法 charcter
+            p_shot: new Audio(soundsBase + "characters/character_nor_shot.wav"),
             boss_come: new Audio(soundsBase + "enemy/boss_coming.wav"),
             boss_hit: new Audio(soundsBase + "enemy/boss_hitted.wav"),
             boss_shot: new Audio(soundsBase + "enemy/boss_shot.wav"), 
