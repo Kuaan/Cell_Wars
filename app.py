@@ -3,11 +3,10 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Cell Wars 2.0 - Boss Update", layout="wide")
 
-# --- GitHub 資源路徑設定 ---
-GITHUB_USER = "Kuaan"
-GITHUB_REPO = "Cell_Wars"
 # 修改為你的 Render 伺服器網址
 SERVER_URL = "https://cell-wars.onrender.com" 
+GITHUB_USER = "Kuaan"
+GITHUB_REPO = "Cell_Wars"
 ASSETS_BASE = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/assets/"
 SOUNDS_BASE = f"{ASSETS_BASE}sounds/"
 
@@ -64,9 +63,9 @@ html_code = f"""
             width: 70px; height: 70px; background: #ff5555; 
             border-radius: 50%; border: 3px solid #ff9999;
             display: flex; align-items: center; justify-content: center;
-            font-weight: bold; user-select: none;
+            font-weight: bold; user-select: none; box-shadow: 0 4px 0 #b30000;
         }}
-        .btn-fire:active {{ background: #ff0000; transform: scale(0.95); }}
+        .btn-fire:active {{ transform: translateY(4px); box-shadow: none; }}
 
         .btn-skill {{
             width: 50px; height: 50px; background: #8be9fd; 
@@ -78,19 +77,21 @@ html_code = f"""
         .btn-skill.disabled {{ filter: grayscale(100%); opacity: 0.5; }}
         .btn-skill:active {{ transform: scale(0.95); }}
 
-        /* --- 優化2: 技能條樣式 --- */
-        #charge-container {{ display: flex; gap: 8px; margin-bottom: 5px; align-items: center; }}
-        .charge-wrapper {{
-            position: relative; width: 16px; height: 16px;
-            border-radius: 50%; border: 2px solid #555; background: #222;
-            overflow: hidden;
+        /* --- 優化4: 長條狀能量槽 (Bar Style) --- */
+        #charge-container {{ 
+            display: flex; gap: 4px; margin-bottom: 8px; align-items: center; 
+            background: #222; padding: 4px; border-radius: 4px; border: 1px solid #444;
+        }}
+        .charge-bar-segment {{
+            position: relative; width: 30px; height: 12px;
+            background: #333; border: 1px solid #555;
+            transform: skewX(-15deg); /* 斜角設計 */
         }}
         .charge-fill {{
-            position: absolute; bottom: 0; left: 0; width: 100%; height: 0%;
-            background: #f1fa8c; transition: height 0.2s;
+            position: absolute; bottom: 0; left: 0; width: 0%; height: 100%;
+            background: #f1fa8c; transition: width 0.2s;
         }}
-        .charge-wrapper.full {{ border-color: #fff; box-shadow: 0 0 5px #f1fa8c; }}
-        .charge-wrapper.full .charge-fill {{ height: 100% !important; }}
+        .charge-bar-segment.full .charge-fill {{ width: 100% !important; box-shadow: 0 0 5px #f1fa8c; }}
 
     </style>
 </head>
@@ -98,7 +99,7 @@ html_code = f"""
 
     <div id="login-overlay">
         <h1 style="color: #50fa7b;">🦠 CELL WARS: BOSS MODE</h1>
-        <p style="color: #aaa; font-size: 12px;">Boss appears in 45s</p>
+        <p style="color: #aaa; font-size: 12px;">Defeat Elite -> Wait 30s -> Boss</p>
         <input type="text" id="name-input" placeholder="Enter Name" maxlength="8" style="padding:10px; text-align:center;">
         <br><button id="start-btn" style="padding:10px 30px; background:#50fa7b; border:none; border-radius:5px; font-weight:bold;">START</button>
     </div>
@@ -114,9 +115,9 @@ html_code = f"""
 
         <div id="actions-zone">
             <div id="charge-container">
-                <div class="charge-wrapper" id="cw1"><div class="charge-fill" id="cf1"></div></div>
-                <div class="charge-wrapper" id="cw2"><div class="charge-fill" id="cf2"></div></div>
-                <div class="charge-wrapper" id="cw3"><div class="charge-fill" id="cf3"></div></div>
+                <div class="charge-bar-segment" id="seg1"><div class="charge-fill" id="fill1"></div></div>
+                <div class="charge-bar-segment" id="seg2"><div class="charge-fill" id="fill2"></div></div>
+                <div class="charge-bar-segment" id="seg3"><div class="charge-fill" id="fill3"></div></div>
             </div>
             
             <div style="display:flex; gap:20px; align-items:flex-end;">
@@ -133,10 +134,11 @@ html_code = f"""
         const assetsBase = "{ASSETS_BASE}";
         const soundsBase = "{SOUNDS_BASE}";
         
-        // --- 1. 聲音實作 ---
+        // --- 優化1: 聲音修復與預載入 ---
+        // 注意: 檔案名稱必須完全對應 github
         const audioFiles = {{
             bgm: new Audio(soundsBase + "bgm/bgm-145a.wav"),
-            p_hit: new Audio(soundsBase + "characters/charcter_hitted.wav"),
+            p_hit: new Audio(soundsBase + "characters/charcter_hitted.wav"), // 依照你提供的拼法 charcter
             p_shot: new Audio(soundsBase + "characters/charcter_nor_shot.wav"),
             boss_come: new Audio(soundsBase + "enemy/boss_coming.wav"),
             boss_hit: new Audio(soundsBase + "enemy/boss_hitted.wav"),
@@ -146,21 +148,19 @@ html_code = f"""
             skill: new Audio(soundsBase + "skill/slime.wav")
         }};
         
-        // 設定 BGM 循環
         audioFiles.bgm.loop = true;
-        audioFiles.bgm.volume = 0.5;
+        audioFiles.bgm.volume = 0.4;
 
-        // 播放輔助函式 (防止報錯)
         function playSfx(key) {{
             const s = audioFiles[key];
             if(s) {{
                 s.currentTime = 0;
-                s.play().catch(e => console.log("Audio play failed", e));
+                s.play().catch(e => console.log("Audio play failed (interaction needed)", e));
             }}
         }}
 
-        // --- 圖片載入 ---
-        const skins = {{ cells: [], viruses: [] }};
+        // --- 優化2: 圖片修正 (boss_1.png) ---
+        const skins = {{ cells: [], viruses: [], boss: null }};
         function loadImg(path) {{
             let img = new Image(); img.src = path;
             img.onerror = () => {{ img.isBroken = true; }};
@@ -170,6 +170,8 @@ html_code = f"""
             skins.cells.push(loadImg(assetsBase + "cell_" + i + ".png"));
             skins.viruses.push(loadImg(assetsBase + "virus_" + i + ".png"));
         }}
+        // 載入正確的 Boss 圖片
+        skins.boss = loadImg(assetsBase + "enemy/boss_1.png"); // 假設 boss_1 在 enemy 資料夾下，若在 assets 根目錄請自行調整
 
         let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], skill_objects: [] }};
         let myId = null;
@@ -196,7 +198,7 @@ html_code = f"""
             updateUI();
         }});
 
-        // --- UI 更新邏輯 ---
+        // --- UI 更新邏輯 (Bar Style) ---
         function updateUI() {{
             if (!myId || !gameState.players[myId]) return;
             const me = gameState.players[myId];
@@ -206,25 +208,21 @@ html_code = f"""
             const lbHtml = sorted.map((p, i) => `<span class="score-pill">${{i==0?'👑':''}}${{p.name}}:${{p.score}}</span>`).join('');
             document.getElementById('lb-content').innerHTML = lbHtml;
 
-            // 優化2: 技能槽百分比顯示
-            // logic: me.charge 是整數(0-3), me.hit_accumulated 是當前集氣進度(0-20)
+            // 優化4: 長條狀技能槽顯示
             for(let i=1; i<=3; i++) {{
-                const elWrap = document.getElementById('cw'+i);
-                const elFill = document.getElementById('cf'+i);
+                const elSeg = document.getElementById('seg'+i);
+                const elFill = document.getElementById('fill'+i);
                 
                 if (me.charge >= i) {{
-                    // 已經集滿的氣
-                    elWrap.classList.add('full');
-                    elFill.style.height = '100%';
+                    elSeg.classList.add('full');
+                    elFill.style.width = '100%';
                 }} else if (me.charge === i - 1) {{
-                    // 正在集的氣
-                    elWrap.classList.remove('full');
+                    elSeg.classList.remove('full');
                     let pct = (me.hit_accumulated / 20) * 100;
-                    elFill.style.height = pct + '%';
+                    elFill.style.width = pct + '%';
                 }} else {{
-                    // 還沒開始集的氣
-                    elWrap.classList.remove('full');
-                    elFill.style.height = '0%';
+                    elSeg.classList.remove('full');
+                    elFill.style.width = '0%';
                 }}
             }}
 
@@ -237,54 +235,50 @@ html_code = f"""
         function draw() {{
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 1. 畫技能分身 (優化3: 用跟自己一樣的圖示)
+            // 技能分身
             ctx.globalAlpha = 0.7;
             if (gameState.skill_objects) {{
                 gameState.skill_objects.forEach(obj => {{
-                    // 取得對應的 skin 圖片
                     let img = skins.cells[(obj.skin || 1) - 1];
-                    if(img && img.complete && !img.isBroken) {{
-                        ctx.drawImage(img, obj.x, obj.y, 30, 30);
-                    }} else {{
-                        // Fallback
-                        ctx.beginPath(); ctx.arc(obj.x, obj.y, 15, 0, Math.PI*2);
-                        ctx.fillStyle = "#8be9fd"; ctx.fill();
-                    }}
-                    // 畫個圈表示是分身
+                    if(img && img.complete && !img.isBroken) ctx.drawImage(img, obj.x, obj.y, 30, 30);
+                    else {{ ctx.beginPath(); ctx.arc(obj.x, obj.y, 15, 0, Math.PI*2); ctx.fillStyle="#8be9fd"; ctx.fill(); }}
                     ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; 
                     ctx.beginPath(); ctx.arc(obj.x+15, obj.y+15, 18, 0, Math.PI*2); ctx.stroke();
                 }});
             }}
             ctx.globalAlpha = 1.0;
 
-            // 2. 畫敵人 (包含 Boss)
+            // 敵人
             for (let id in gameState.enemies) {{
                 let e = gameState.enemies[id];
                 let isBoss = (e.type === 999);
                 
                 if (isBoss) {{
-                    // 優化4: Boss 300x300
-                    // 這裡暫時放大 virus_3 的圖
-                    let img = skins.viruses[2]; 
-                    if(img && img.complete) ctx.drawImage(img, e.x, e.y, e.size, e.size);
-                    else {{ ctx.fillStyle = "purple"; ctx.fillRect(e.x, e.y, e.size, e.size); }}
+                    // 優化2: 使用 boss_1.png
+                    let img = skins.boss; 
+                    // 如果圖片壞掉或沒載入，用紫色方塊代替
+                    if(img && img.complete && !img.isBroken && img.naturalWidth !== 0) {{
+                        ctx.drawImage(img, e.x, e.y, e.size, e.size);
+                    }} else {{ 
+                        ctx.fillStyle = "purple"; ctx.fillRect(e.x, e.y, e.size, e.size); 
+                    }}
                     
                     // Boss 血條
                     ctx.fillStyle = "#555"; ctx.fillRect(e.x, e.y-10, e.size, 8);
                     ctx.fillStyle = "#bd93f9"; ctx.fillRect(e.x, e.y-10, e.size * (e.hp/e.max_hp), 8);
                     
                 }} else {{
+                    // 優化2: virus_3 是菁英怪
                     let img = skins.viruses[(e.type || 1) - 1];
                     if(img && img.complete) ctx.drawImage(img, e.x, e.y, e.size, e.size);
                     else {{ ctx.fillStyle = "red"; ctx.fillRect(e.x, e.y, e.size, e.size); }}
                     
-                    // 小怪血條
                     ctx.fillStyle = "#555"; ctx.fillRect(e.x, e.y-6, e.size, 3);
                     ctx.fillStyle = "#ff5555"; ctx.fillRect(e.x, e.y-6, e.size * (e.hp/e.max_hp), 3);
                 }}
             }}
 
-            // 3. 畫玩家
+            // 玩家
             for (let id in gameState.players) {{
                 let p = gameState.players[id];
                 let img = skins.cells[(p.skin || 1) - 1];
@@ -299,21 +293,15 @@ html_code = f"""
                 ctx.fillStyle = "#50fa7b"; ctx.fillRect(p.x, p.y-10, 30 * (p.hp / p.max_hp), 4);
             }}
 
-            // 4. 畫子彈 (優化5: 不同圖示)
+            // 子彈
             gameState.bullets.forEach(b => {{
                 ctx.beginPath();
                 if (b.owner === 'boss') {{
-                    // 魔王子彈：大紫色
-                    ctx.fillStyle = '#bd93f9';
-                    ctx.arc(b.x, b.y, 8, 0, Math.PI*2);
+                    ctx.fillStyle = '#bd93f9'; ctx.arc(b.x, b.y, 8, 0, Math.PI*2);
                 }} else if (b.owner === 'enemy') {{
-                    // 敵方子彈：紅色三角
-                    ctx.fillStyle = '#ff5555';
-                    ctx.moveTo(b.x, b.y+5); ctx.lineTo(b.x-4, b.y-4); ctx.lineTo(b.x+4, b.y-4);
+                    ctx.fillStyle = '#ff5555'; ctx.moveTo(b.x, b.y+5); ctx.lineTo(b.x-4, b.y-4); ctx.lineTo(b.x+4, b.y-4);
                 }} else {{
-                    // 玩家子彈：藍色圓點
-                    ctx.fillStyle = '#8be9fd';
-                    ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+                    ctx.fillStyle = '#8be9fd'; ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
                 }}
                 ctx.fill();
             }});
@@ -329,19 +317,25 @@ html_code = f"""
         }});
         manager.on('end', () => socket.emit('move', {{ dx: 0, dy: 0 }}));
 
+        // --- START 流程 (關鍵: 音效解鎖) ---
         document.getElementById('start-btn').onclick = () => {{
             const name = document.getElementById('name-input').value.trim() || "Hero";
             socket.emit('join_game', {{ name: name }});
             document.getElementById('login-overlay').style.display = 'none';
-            // 嘗試播放 BGM (需使用者互動)
-            audioFiles.bgm.play().catch(()=>console.log("Auto-play blocked"));
+            
+            // 嘗試解鎖並播放 BGM
+            audioFiles.bgm.play().then(() => {{
+                console.log("Audio Unlocked");
+            }}).catch((err) => {{
+                console.log("Auto-play blocked, wait for interaction", err);
+            }});
         }};
 
         const fireBtn = document.getElementById('fire-btn');
         let fireInterval;
         const startFire = (e) => {{ 
             e.preventDefault(); 
-            playSfx('p_shot'); // 玩家自己開槍的聲音直接在前端播
+            playSfx('p_shot'); 
             socket.emit('shoot');
             fireInterval = setInterval(()=> {{
                 socket.emit('shoot');
