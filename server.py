@@ -71,9 +71,9 @@ async def game_loop():
                     "x": 150, "y": -300,
                     "type": 999, # Boss ID
                     "hp": 500, "max_hp": 500,
-                    "speed": 1.5,
+                    "speed": 3,
                     "size": 300, 
-                    "score": 5000,
+                    "score": 1000,
                     "move_timer": 0
                 }
                 # 再次確保聲音播放，因為這是視覺出現
