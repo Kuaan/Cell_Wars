@@ -18,7 +18,7 @@ CELL_CONFIG = {
 VIRUS_CONFIG = {
     1: {"hp": 3, "speed": 3, "size": 50, "score": 10, "prob": 0.7},
     2: {"hp": 1, "speed": 7, "size": 25, "score": 25, "prob": 0.2},
-    3: {"hp": 15, "speed": 2, "size": 70, "score": 100, "prob": 0.1}
+    3: {"hp": 15, "speed": 2, "size": 90, "score": 100, "prob": 0.1}
 }
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -119,7 +119,7 @@ async def game_loop():
                 eid = "THE_BOSS"
                 game_state["enemies"][eid] = {
                     "x": 150, "y": -300, "type": 999,
-                    "hp": 500, "max_hp": 500, "speed": 3, "size": 200,
+                    "hp": 500, "max_hp": 500, "speed": 3, "size": 230,
                     "score": 1000, "move_timer": 0
                 }
                 await sio.emit('sfx', {'type': 'boss_coming'})
