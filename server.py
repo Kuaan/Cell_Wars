@@ -86,7 +86,7 @@ def spawn_boss():
     eid = "THE_BOSS"
     game_state["enemies"][eid] = {
         "x": 150, "y": -300, "type": 999,
-        "hp": 500, "max_hp": 500, "speed": 3, "size": 230,
+        "hp": 500, "max_hp": 500, "speed": 5, "size": 230,
         "score": 1000, "move_timer": 0
     }
     game_vars["boss_phase"] = "boss_active"
