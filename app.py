@@ -271,7 +271,7 @@ html_code = f"""
                     if(skins.boss.complete) ctx.drawImage(skins.boss, e.x, e.y, e.size, e.size);
                     ctx.fillStyle = "#555"; ctx.fillRect(e.x, e.y-10, e.size, 8);
                     ctx.fillStyle = "#bd93f9"; ctx.fillRect(e.x, e.y-10, e.size * (e.hp/e.max_hp), 8);
-                } else {{
+                }} else {{
                     let img = skins.viruses[(e.type || 1) - 1];
                     if(img && img.complete) ctx.drawImage(img, e.x, e.y, e.size, e.size);
                     ctx.fillStyle = "#555"; ctx.fillRect(e.x, e.y-6, e.size, 3);
