@@ -16,9 +16,9 @@ CELL_CONFIG = {
 }
 
 VIRUS_CONFIG = {
-    1: {"hp": 3, "speed": 3, "size": 45, "score": 10, "prob": 0.7},
+    1: {"hp": 3, "speed": 3, "size": 50, "score": 10, "prob": 0.7},
     2: {"hp": 1, "speed": 7, "size": 25, "score": 25, "prob": 0.2},
-    3: {"hp": 15, "speed": 2, "size": 90, "score": 100, "prob": 0.1} # 菁英怪
+    3: {"hp": 15, "speed": 2, "size": 95, "score": 100, "prob": 0.1} # 菁英怪
 }
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
