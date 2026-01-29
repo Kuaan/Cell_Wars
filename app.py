@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Cell Wars 2.0 - Boss Update", layout="wide")
+st.set_page_config(page_title="Cell Wars 3.0 - Boss Coming !!", layout="wide")
 
 # 修改為你的 Render 伺服器網址
 SERVER_URL = "https://cell-wars.onrender.com" 
