@@ -1,4 +1,4 @@
-#server.py
+#v3.6 server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -8,7 +8,7 @@ import uuid
 import math
 import time
 
-# --- 設定與參數 ---
+# --- 設定與參數 (重點修改區：新增攻擊配置) ---
 CELL_CONFIG = {
     1: {"name": "Soldier", "hp": 5, "speed": 8, "bullet_speed": 7, "damage": 1, "color": "#50fa7b"},
     2: {"name": "Scout", "hp": 3, "speed": 12, "bullet_speed": 10, "damage": 1, "color": "#8be9fd"},
@@ -16,9 +16,21 @@ CELL_CONFIG = {
 }
 
 VIRUS_CONFIG = {
-    1: {"hp": 3, "speed": 3, "size": 50, "score": 10, "prob": 0.7},
-    2: {"hp": 1, "speed": 7, "size": 25, "score": 25, "prob": 0.2},
-    3: {"hp": 15, "speed": 2, "size": 95, "score": 100, "prob": 0.1} # 菁英怪
+    # 普通怪：單發，傷害1，頻率低
+    1: {
+        "hp": 3, "speed": 3, "size": 50, "score": 10, "prob": 0.7,
+        "attack": {"mode": "single", "damage": 1, "bullet_speed": 8, "fire_rate": 0.005} 
+    },
+    # 快速怪：單發，子彈快，頻率稍高
+    2: {
+        "hp": 1, "speed": 7, "size": 25, "score": 25, "prob": 0.2,
+        "attack": {"mode": "single", "damage": 1, "bullet_speed": 15, "fire_rate": 0.01}
+    },
+    # 菁英怪：雙管砲 (Double)，傷害高，子彈慢重
+    3: {
+        "hp": 15, "speed": 2, "size": 95, "score": 100, "prob": 0.1,
+        "attack": {"mode": "double", "damage": 2, "bullet_speed": 6, "fire_rate": 0.02} 
+    }
 }
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -56,7 +68,6 @@ def compress_state(state):
     }
     
     for pid, p in state["players"].items():
-        # 雙重保險：確保傳送給前端的 hp 不會是負數
         safe_hp = max(0, int(p["hp"]))
         compressed["players"][pid] = {
             "x": int(p["x"]), "y": int(p["y"]), "skin": p["skin"], "name": p["name"],
@@ -101,7 +112,7 @@ async def game_loop():
     while True:
         curr = time.time()
 
-        # --- 魔王狀態機邏輯 ---
+        # --- 魔王狀態機 ---
         if game_vars["boss_phase"] == "countdown":
             if curr - game_vars["phase_start_time"] > 25:
                 game_vars["boss_phase"] = "warning"
@@ -134,7 +145,7 @@ async def game_loop():
                     "score": stats["score"], "move_timer": 0
                 }
 
-        # --- 擊殺處理函數 ---
+        # --- 擊殺處理 ---
         def handle_enemy_death(enemy):
             if enemy['type'] == 3:
                 if game_vars["boss_phase"] == "initial":
@@ -223,9 +234,9 @@ async def game_loop():
                             await sio.emit('sfx', {'type': 'character_hitted'})
                             hit = True
                             if player['hp'] <= 0:
-                                # 玩家死亡邏輯
+                                # 玩家死亡
                                 player['x'], player['y'] = random.randint(100, 500), 400
-                                player['hp'] = player['max_hp'] # 重置滿血
+                                player['hp'] = player['max_hp']
                                 player['score'] = int(player['score'] / 2)
                                 player['charge'] = 0
                                 player['hit_accumulated'] = 0
@@ -233,7 +244,7 @@ async def game_loop():
                 if not hit: active_bullets.append(b)
         game_state["bullets"] = active_bullets
 
-        # --- AI 移動與碰觸傷害修復 (重點修改) ---
+        # --- AI 移動與攻擊邏輯 (重點修改) ---
         for eid, enemy in list(game_state["enemies"].items()):
             if enemy['type'] == 999: # Boss
                 enemy['move_timer'] += 1
@@ -245,12 +256,10 @@ async def game_loop():
                 enemy['y'] = max(0, min(MAP_HEIGHT - enemy['size'], enemy['y'] + enemy.get('dy', 0)))
 
                 for pid, player in game_state["players"].items():
-                    # Boss 碰觸玩家
                     if check_collision(player, enemy, 30, enemy['size']):
                         if random.random() < 0.05:
                             player['hp'] -= 1
                             await sio.emit('sfx', {'type': 'character_hitted'})
-                            # --- 新增: Boss 碰觸致死判斷 ---
                             if player['hp'] <= 0:
                                 player['x'], player['y'] = random.randint(100, 500), 400
                                 player['hp'] = player['max_hp']
@@ -269,7 +278,9 @@ async def game_loop():
                             "owner": "boss", "damage": 1, "size": 10
                         })
                     await sio.emit('sfx', {'type': 'boss_shot'})
-            else: # 小怪
+            
+            else: # 一般怪物 (Type 1, 2, 3)
+                # 1. 移動
                 enemy['y'] += enemy['speed'] * 0.5
                 enemy['move_timer'] += 1
                 if enemy['move_timer'] > 30:
@@ -278,14 +289,12 @@ async def game_loop():
                 enemy['x'] = max(0, min(MAP_WIDTH - enemy['size'], enemy['x']))
                 if enemy['y'] > MAP_HEIGHT: enemy['y'] = -50
                 
-                # 小怪碰觸玩家 (本來沒有死亡邏輯，現在補上)
+                # 2. 碰觸傷害 (含死亡檢查)
                 for pid, player in game_state["players"].items():
                     if check_collision(player, enemy, 30, enemy['size']):
-                         # 降低小怪碰觸頻率以免秒殺，但如果碰到了扣血
                         if random.random() < 0.1: 
                             player['hp'] -= 1
                             await sio.emit('sfx', {'type': 'character_hitted'})
-                            # --- 新增: 小怪碰觸致死判斷 ---
                             if player['hp'] <= 0:
                                 player['x'], player['y'] = random.randint(100, 500), 400
                                 player['hp'] = player['max_hp']
@@ -293,11 +302,35 @@ async def game_loop():
                                 player['charge'] = 0
                                 player['hit_accumulated'] = 0
 
-                if random.random() < 0.005:
-                    game_state["bullets"].append({
-                        "x": enemy['x'] + enemy['size'] / 2, "y": enemy['y'] + enemy['size'],
-                        "dx": 0, "dy": 10, "owner": "enemy", "damage": 1, "size": 5
-                    })
+                # 3. 攻擊邏輯 (讀取 Config)
+                atk_stats = VIRUS_CONFIG[enemy['type']]['attack']
+                
+                if random.random() < atk_stats['fire_rate']:
+                    center_x = enemy['x'] + enemy['size'] / 2
+                    bottom_y = enemy['y'] + enemy['size']
+                    
+                    bullets_to_spawn = []
+                    
+                    # 雙管砲邏輯 (Double)
+                    if atk_stats['mode'] == 'double':
+                         # 左管 (-15) 和 右管 (+15)
+                        bullets_to_spawn.append({"x": center_x - 15, "y": bottom_y})
+                        bullets_to_spawn.append({"x": center_x + 15, "y": bottom_y})
+                    # 單發邏輯 (Single)
+                    else:
+                        bullets_to_spawn.append({"x": center_x, "y": bottom_y})
+
+                    # 統一生成子彈
+                    for b_pos in bullets_to_spawn:
+                        game_state["bullets"].append({
+                            "x": b_pos['x'], 
+                            "y": b_pos['y'],
+                            "dx": 0, 
+                            "dy": atk_stats['bullet_speed'], # 使用設定檔速度
+                            "owner": "enemy", 
+                            "damage": atk_stats['damage'],   # 使用設定檔傷害
+                            "size": 6 if atk_stats['damage'] > 1 else 5 # 傷害高的子彈稍微大一點
+                        })
 
         await sio.emit('state_update', compress_state(game_state))
         await asyncio.sleep(0.05)
