@@ -171,7 +171,7 @@ html_code = f"""
             skins.viruses.push(loadImg(assetsBase + "virus_" + i + ".png"));
         }}
         // 載入正確的 Boss 圖片
-        skins.boss = loadImg(assetsBase + "enemy/boss_1.png"); // 假設 boss_1 在 enemy 資料夾下，若在 assets 根目錄請自行調整
+        skins.boss = loadImg(assetsBase + "boss_1.png"); // 假設 boss_1 在 enemy 資料夾下，若在 assets 根目錄請自行調整
 
         let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], skill_objects: [] }};
         let myId = null;
