@@ -1,3 +1,4 @@
+#server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -28,13 +29,12 @@ MAP_WIDTH = 600
 MAP_HEIGHT = 500
 MAX_ENEMIES = 5
 
-# --- 全域狀態變數 (修改重點) ---
+# --- 全域狀態變數 ---
 game_vars = {
-    # 狀態: 'initial' (剛開局), 'countdown' (首殺後倒數), 'collecting' (殺滿10隻), 'warning' (警告中), 'boss_active' (魔王在場)
     "boss_phase": "initial", 
-    "phase_start_time": 0,    # 用於計時 (倒數或警告)
-    "elite_kill_count": 0,    # 用於 'collecting' 階段計數
-    "target_kills": 10        # 目標擊殺數
+    "phase_start_time": 0,    
+    "elite_kill_count": 0,    
+    "target_kills": 10        
 }
 
 game_state = {
@@ -42,30 +42,32 @@ game_state = {
     "enemies": {},
     "bullets": [],
     "skill_objects": [],
-    "warning_active": False # 告訴前端是否顯示警告圖示
+    "warning_active": False 
 }
 
-# --- 數據壓縮 ---
+# --- 數據壓縮 (修正重點：防止負血量導致前端繪圖錯誤) ---
 def compress_state(state):
     compressed = {
         "players": {},
         "enemies": {},
         "bullets": [],
         "skill_objects": [],
-        "w": state["warning_active"] # 傳送警告狀態
+        "w": state["warning_active"] 
     }
     
     for pid, p in state["players"].items():
+        # 修正: 使用 max(0, ...) 確保不會傳送負數血量
         compressed["players"][pid] = {
             "x": int(p["x"]), "y": int(p["y"]), "skin": p["skin"], "name": p["name"],
-            "hp": int(p["hp"]), "max_hp": int(p["max_hp"]), "score": int(p["score"]),
+            "hp": max(0, int(p["hp"])), "max_hp": int(p["max_hp"]), "score": int(p["score"]),
             "charge": p["charge"], "hit_accumulated": p["hit_accumulated"], "c": p["stats"]["color"]
         }
         
     for eid, e in state["enemies"].items():
+        # 修正: 使用 max(0, ...) 確保不會傳送負數血量
         compressed["enemies"][eid] = {
             "x": int(e["x"]), "y": int(e["y"]), "type": e["type"],
-            "size": e["size"], "hp": int(e["hp"]), "max_hp": int(e["max_hp"])
+            "size": e["size"], "hp": max(0, int(e["hp"])), "max_hp": int(e["max_hp"])
         }
         
     for b in state["bullets"]:
@@ -90,7 +92,7 @@ def spawn_boss():
         "score": 1000, "move_timer": 0
     }
     game_vars["boss_phase"] = "boss_active"
-    game_state["warning_active"] = False # 關閉警告
+    game_state["warning_active"] = False 
 
 async def game_loop():
     boss_shoot_toggle = 0
@@ -98,28 +100,24 @@ async def game_loop():
     while True:
         curr = time.time()
 
-        # --- 魔王狀態機邏輯 (核心修改) ---
+        # --- 魔王狀態機邏輯 ---
         if game_vars["boss_phase"] == "countdown":
-            # 首殺後的倒數 (30秒 = 25秒等待 + 5秒警告)
             if curr - game_vars["phase_start_time"] > 25:
                 game_vars["boss_phase"] = "warning"
                 game_vars["phase_start_time"] = curr
                 game_state["warning_active"] = True
-                await sio.emit('sfx', {'type': 'boss_coming'}) # 播放音效
+                await sio.emit('sfx', {'type': 'boss_coming'}) 
 
         elif game_vars["boss_phase"] == "warning":
-            # 警告 5 秒後生成
             if curr - game_vars["phase_start_time"] > 5:
                 spawn_boss()
-                await sio.emit('sfx', {'type': 'boss_coming'}) # 出現時再播一次更有氣勢
+                await sio.emit('sfx', {'type': 'boss_coming'}) 
 
         elif game_vars["boss_phase"] == "collecting":
-            # 等待玩家殺滿 10 隻菁英怪 (邏輯在 handle_enemy_death 處理)
             pass
 
         # --- 敵人生成 ---
         if len(game_state["enemies"]) < MAX_ENEMIES:
-            # Boss 在場時不生小怪
             if game_vars["boss_phase"] != "boss_active":
                 eid = str(uuid.uuid4())
                 rand_val = random.random()
@@ -135,29 +133,24 @@ async def game_loop():
                     "score": stats["score"], "move_timer": 0
                 }
 
-        # --- 擊殺處理函數 (狀態變更) ---
+        # --- 擊殺處理函數 ---
         def handle_enemy_death(enemy):
-            # 1. 菁英怪死亡 (Type 3)
             if enemy['type'] == 3:
                 if game_vars["boss_phase"] == "initial":
                     game_vars["boss_phase"] = "countdown"
                     game_vars["phase_start_time"] = time.time()
-                    print("First Elite Killed! Countdown Started.")
                 elif game_vars["boss_phase"] == "collecting":
                     game_vars["elite_kill_count"] += 1
-                    print(f"Elite Kill: {game_vars['elite_kill_count']}/{game_vars['target_kills']}")
                     if game_vars["elite_kill_count"] >= game_vars["target_kills"]:
                         game_vars["boss_phase"] = "warning"
                         game_vars["phase_start_time"] = time.time()
                         game_state["warning_active"] = True
                         asyncio.create_task(sio.emit('sfx', {'type': 'boss_coming'}))
 
-            # 2. 魔王死亡 (Type 999)
             if enemy['type'] == 999:
                 game_vars["boss_phase"] = "collecting"
                 game_vars["elite_kill_count"] = 0
                 game_state["warning_active"] = False
-                print("Boss Defeated! Collecting souls...")
 
         # --- 技能邏輯 ---
         active_skills = []
@@ -215,10 +208,11 @@ async def game_loop():
                                     p["hit_accumulated"] = 0
                                     p["charge"] = min(3, p["charge"] + 1)
 
-                                if enemy['hp'] <= 0:
-                                    handle_enemy_death(enemy)
-                                    p['score'] += enemy['score']
-                                    if eid in game_state["enemies"]: game_state["enemies"].pop(eid)
+                            if enemy['hp'] <= 0:
+                                handle_enemy_death(enemy)
+                                if b['owner'] in game_state["players"]:
+                                    game_state["players"][b['owner']]['score'] += enemy['score']
+                                if eid in game_state["enemies"]: game_state["enemies"].pop(eid)
                             break
                 else:
                     # 敵人打玩家
@@ -228,10 +222,9 @@ async def game_loop():
                             await sio.emit('sfx', {'type': 'character_hitted'})
                             hit = True
                             if player['hp'] <= 0:
-                                # 玩家死亡懲罰：分數減半
                                 player['x'], player['y'] = random.randint(100, 500), 400
                                 player['hp'] = 3
-                                player['score'] = int(player['score'] / 2) # <--- 分數減半保留
+                                player['score'] = int(player['score'] / 2)
                                 player['charge'] = 0
                                 player['hit_accumulated'] = 0
                             break
