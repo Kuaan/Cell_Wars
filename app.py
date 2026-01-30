@@ -1,4 +1,4 @@
-#v3.5 app.py
+#v3.6 app.py
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -142,17 +142,42 @@ html_code = f"""
             boss_hit: new Audio(soundsBase + "enemy/boss_hitted.wav"),
             boss_shot: new Audio(soundsBase + "enemy/boss_shot.wav"), 
             e_hit: new Audio(soundsBase + "enemy/enemy_hitted.wav"),
+            e_shot: new Audio(soundsBase + "enemy/enemy_nor_shot.wav"),
             skill: new Audio(soundsBase + "skill/slime.wav")
         }};
         audioFiles.bgm.loop = true;
-        let sfxVolume = 0.6;
+        let volBGM = 0.5;
+        let volSFX = 0.8;
 
-        document.getElementById('vol-bgm').addEventListener('input', (e) => {{ audioFiles.bgm.volume = parseFloat(e.target.value); }});
-        document.getElementById('vol-sfx').addEventListener('input', (e) => {{ sfxVolume = parseFloat(e.target.value); }});
+        # 初始化音量
+        audioFiles.bgm.volume = volBGM;
+        for (let k in audioFiles) {{
+            if(k !== 'bgm') audioFiles[k].volume = volSFX;
+        }}
+
+        # 監聽 Slider 變化
+        document.getElementById('bgm-vol').oninput = function() {{
+            volBGM = this.value / 100;
+            audioFiles.bgm.volume = volBGM;
+            if(volBGM === 0) audioFiles.bgm.pause();
+            else if(audioFiles.bgm.paused && document.getElementById('login-overlay').style.display === 'none') audioFiles.bgm.play();
+        }};
+
+        document.getElementById('sfx-vol').oninput = function() {{
+            volSFX = this.value / 100;
+            # 更新所有 SFX 的音量
+            for (let k in audioFiles) {{
+                if(k !== 'bgm') audioFiles[k].volume = volSFX;
+            }}
+        }};
 
         function playSfx(key) {{
+            if (volSFX <= 0) return; # 靜音檢查
             const s = audioFiles[key];
-            if(s) {{ s.volume = sfxVolume; s.currentTime = 0; s.play().catch(e => {{}}); }}
+            if(s) {{ 
+                if (!s.paused) {{ s.currentTime = 0; }} # 如果正在播，重頭播
+                s.play().catch(e => {{}}); 
+            }}
         }}
 
         const skins = {{ cells: [], viruses: [], boss: null }};
@@ -171,12 +196,15 @@ html_code = f"""
 
         socket.on('connect', () => {{ myId = socket.id; }});
         socket.on('sfx', (data) => {{
+            # 這裡只播放 Server 叫我們播的 (例如敵人被打中、魔王出現)
+            # 自己的射擊聲音在這裡被移除了，改由本地觸發
             switch(data.type) {{
                 case 'character_hitted': playSfx('p_hit'); break;
                 case 'boss_coming': playSfx('boss_come'); break;
                 case 'boss_hitted': playSfx('boss_hit'); break;
                 case 'boss_shot': playSfx('boss_shot'); break;
                 case 'enemy_hitted': playSfx('e_hit'); break;
+                case 'enemy_nor_shot': playSfx('e_shot'); break;
                 case 'skill_slime': playSfx('skill'); break;
             }}
         }});
@@ -307,6 +335,23 @@ html_code = f"""
 
         const fireBtn = document.getElementById('fire-btn');
         let fireInterval;
+
+        fireBtn.onmousedown = fireBtn.ontouchstart = (e) => {{
+            e.preventDefault(); 
+            
+            // 1. 本地直接播放聲音 (不用等 Server)
+            playSfx('p_shot'); 
+            
+            // 2. 發送射擊指令
+            socket.emit('shoot');
+            
+            fireInterval = setInterval(()=> {{ 
+                socket.emit('shoot'); 
+                playSfx('p_shot'); // 連發時也本地播放
+            }}, 250);
+        }};
+
+        fireBtn.onmouseup = fireBtn.ontouchend = () => clearInterval(fireInterval);
         const shoot = (e) => {{ 
             e.preventDefault(); 
             socket.emit('shoot'); playSfx('p_shot'); 
