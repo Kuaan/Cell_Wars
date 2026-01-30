@@ -1,11 +1,10 @@
-# v3.6.2 app.py (Optimized Frontend with Better Audio Logic)
 import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Cell Wars V5", layout="wide")
 
-# 請替換為你的 Render URL
-SERVER_URL = "https://cell-wars.onrender.com" 
+# 設定連線參數
+SERVER_URL = "https://cell-wars.onrender.com"
 GITHUB_USER = "Kuaan"
 GITHUB_REPO = "Cell_Wars"
 ASSETS_BASE = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/assets/"
@@ -27,6 +26,7 @@ html_code = f"""
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
+        /* CSS 樣式保持不變，維持原本的 Cyberpunk/Pixel 風格 */
         * {{ box-sizing: border-box; }}
         body {{ 
             background-color: #0d0211; color: #fff; margin: 0; padding: 0;
@@ -35,7 +35,6 @@ html_code = f"""
             height: 100vh; width: 100vw;
         }}
 
-        /* 登入介面置頂 */
         #login-overlay {{
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: #0d0211; z-index: 99999; 
@@ -49,7 +48,6 @@ html_code = f"""
         input {{ margin: 15px 0; padding: 12px; font-size: 18px; width: 100%; text-align: center; background: #222; color: #fff; border: 1px solid #444; border-radius: 8px; }}
         button {{ padding: 15px 40px; font-size: 18px; background: #50fa7b; color: #000; border: none; border-radius: 8px; font-weight: bold; width: 100%; cursor: pointer; }}
 
-        /* 頂部資訊列 */
         #top-bar {{
             width: 100%; background: #1a0620; padding: 5px 0;
             display: flex; justify-content: space-around; align-items: center;
@@ -59,14 +57,12 @@ html_code = f"""
         .vol-control {{ display: flex; align-items: center; gap: 5px; font-size: 10px; color: #bd93f9; }}
         input[type=range] {{ width: 50px; cursor: pointer; }}
 
-        /* 畫布 */
         canvas {{ 
             background-color: #000; border: 2px solid #444; 
             width: 95vw; max-width: 600px; height: auto; aspect-ratio: 6/5;
             image-rendering: pixelated; margin-top: 5px;
         }}
 
-        /* UI 容器 */
         #ui-container {{
             width: 100%; max-width: 600px; height: 180px;
             margin-top: 10px; display: flex; justify-content: space-between;
@@ -100,7 +96,7 @@ html_code = f"""
     <div id="login-overlay">
         <div id="login-box">
             <h1 style="color: #50fa7b; margin: 0 0 10px 0;">🦠 CELL WARS</h1>
-            <p style="color: #aaa; font-size: 12px;">Python Server + JS Client Optimized</p>
+            <p style="color: #aaa; font-size: 12px;">擊敗菁英怪以觸發魔王出現</p>
             <input type="text" id="name-input" placeholder="輸入名稱" maxlength="8">
             <button id="start-btn">進入遊戲</button>
         </div>
@@ -136,9 +132,8 @@ html_code = f"""
         const assetsBase = "{ASSETS_BASE}";
         const soundsBase = "{SOUNDS_BASE}";
 
-        // --- 音效系統優化 ---
-        // 預載入音效物件
-        const audioBuffers = {{
+        // 音效載入
+        const audioFiles = {{
             bgm: new Audio(soundsBase + "bgm/bgm-145a.wav"),
             p_hit: new Audio(soundsBase + "characters/character_hitted.wav"),
             p_shot: new Audio(soundsBase + "characters/character_nor_shot.wav"),
@@ -149,50 +144,64 @@ html_code = f"""
             e_shot: new Audio(soundsBase + "enemy/enemy_nor_shot.wav"),
             skill: new Audio(soundsBase + "skill/slime.wav")
         }};
-
-        // BGM 設定
-        audioBuffers.bgm.loop = true;
+        audioFiles.bgm.loop = true;
+        
         let volBGM = 0.4;
         let volSFX = 0.6;
-        let gameStarted = false;
 
-        // 更新音量與狀態
-        function updateVolumes() {{
-            audioBuffers.bgm.volume = volBGM;
-            if (volBGM > 0 && gameStarted && audioBuffers.bgm.paused) {{
-                audioBuffers.bgm.play().catch(e => console.log("BGM play failed:", e));
-            }} else if (volBGM === 0) {{
-                audioBuffers.bgm.pause();
-            }}
-        }}
-
-        // SFX 播放器 (關鍵優化：Clone Node 實現重疊播放)
+        // [優化] Audio Polyphony (多重音效) 實作
+        // 允許高頻率音效 (如槍聲) 重疊播放，避免吞音
         function playSfx(key) {{
-            if (volSFX <= 0) return;
-            const original = audioBuffers[key];
-            if (original) {{
-                // 複製一個新的 Audio 節點來播放，解決卡頓和吞音效問題
-                const clone = original.cloneNode();
-                clone.volume = volSFX;
-                clone.play().catch(e => {{}}); 
-                // 雖然瀏覽器通常會GC，但設為 null 是一個好習慣，或者依賴 cloneNode 自動銷毀
+            if (volSFX <= 0.01) return;
+            const baseAudio = audioFiles[key];
+            if (!baseAudio) return;
+
+            // 需要重疊播放的音效清單
+            const polyphonicSounds = ['p_shot', 'e_shot', 'boss_shot', 'e_hit', 'p_hit'];
+
+            if (polyphonicSounds.includes(key)) {{
+                // 複製節點以實現重疊播放
+                const clone = baseAudio.cloneNode();
+                clone.volume = volSFX; // 確保複製的音效使用當前音量
+                clone.play().catch(e => {{ console.log('Audio play failed', e); }});
+            }} else {{
+                // 其他音效 (如技能、BGM相關) 維持單例播放
+                baseAudio.currentTime = 0;
+                baseAudio.volume = volSFX;
+                baseAudio.play().catch(e => {{}});
             }}
         }}
 
-        // 綁定 Slider 事件
-        document.getElementById('vol-bgm').addEventListener('input', (e) => {{
-            volBGM = parseFloat(e.target.value);
-            updateVolumes();
-        }});
-        
-        document.getElementById('vol-sfx').addEventListener('input', (e) => {{
-            volSFX = parseFloat(e.target.value);
-        }});
+        function updateBGM() {{
+            audioFiles.bgm.volume = volBGM;
+            if(volBGM <= 0.01) audioFiles.bgm.pause();
+            else if(audioFiles.bgm.paused && document.getElementById('login-overlay').style.display === 'none') {{
+                audioFiles.bgm.play().catch(e=>{{}});
+            }}
+        }}
 
-        // --- 遊戲載入 ---
+        // 初始化音量
+        updateBGM();
+        
+        // [優化] 即時音量監聽
+        document.getElementById('vol-bgm').oninput = function() {{
+            volBGM = parseFloat(this.value);
+            updateBGM();
+        }};
+
+        document.getElementById('vol-sfx').oninput = function() {{
+            volSFX = parseFloat(this.value);
+            // 注意：對於 clone 的音效，設定會在下一次播放時生效
+            for (let k in audioFiles) {{
+                if(k !== 'bgm') audioFiles[k].volume = volSFX;
+            }}
+        }};
+
+        // 圖片載入
         const skins = {{ cells: [], viruses: [], boss: null }};
         function loadImg(path) {{
-            let img = new Image(); img.src = path; return img;
+            let img = new Image(); img.src = path;
+            return img;
         }}
         for(let i=1; i<=3; i++) {{
             skins.cells.push(loadImg(assetsBase + "cell_" + i + ".png"));
@@ -205,9 +214,12 @@ html_code = f"""
 
         socket.on('connect', () => {{ myId = socket.id; }});
 
-        // 接收 Server 的音效指令 (只播放別人的或系統音效)
+        // 接收 Server 廣播的音效
         socket.on('sfx', (data) => {{
+            // 未來 Server 端會過濾掉「發送者自己」的事件，
+            // 這裡保留 'character_shot' 是為了聽到「隊友」的槍聲
             switch(data.type) {{
+                case 'character_shot': playSfx('p_shot'); break; 
                 case 'character_hitted': playSfx('p_hit'); break;
                 case 'boss_coming': playSfx('boss_come'); break;
                 case 'boss_hitted': playSfx('boss_hit'); break;
@@ -224,7 +236,6 @@ html_code = f"""
             updateUI();
         }});
 
-        // --- UI 與繪圖 ---
         function updateUI() {{
             if (!myId || !gameState.players[myId]) return;
             const me = gameState.players[myId];
@@ -245,7 +256,7 @@ html_code = f"""
         function draw() {{
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 技能
+            // 技能物件
             ctx.globalAlpha = 0.6;
             (gameState.skill_objects || []).forEach(obj => {{
                 let img = skins.cells[(obj.skin || 1) - 1];
@@ -271,17 +282,16 @@ html_code = f"""
             // 玩家
             for (let id in gameState.players) {{
                 let p = gameState.players[id];
-                // 無敵閃爍效果
+                // [優化] 無敵幀視覺效果
                 if (p.invincible) ctx.globalAlpha = 0.5;
 
                 let img = skins.cells[(p.skin || 1) - 1];
                 if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
-                
+
                 ctx.globalAlpha = 1.0; 
 
                 ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
-                ctx.font = "10px Arial";
-                ctx.fillText(p.name, p.x, p.y-15);
+                ctx.fillText(p.name, p.x+15, p.y-15);
                 const hpRatio = Math.max(0, p.hp / p.max_hp);
                 ctx.fillStyle = "#50fa7b"; ctx.fillRect(p.x, p.y-10, 30 * hpRatio, 4);
             }}
@@ -302,53 +312,69 @@ html_code = f"""
                 const alpha = 0.2 + 0.15 * Math.sin(time * 0.01);
                 ctx.fillStyle = `rgba(255, 0, 0, ${{alpha}})`;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // 掃描線效果
+                const scanY = (time * 0.2) % canvas.height;
+                ctx.strokeStyle = "rgba(255, 50, 50, 0.5)";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, scanY); ctx.lineTo(canvas.width, scanY);
+                ctx.stroke();
+                
+                if (Math.floor(time / 250) % 2 === 0) {{
+                    ctx.translate(canvas.width/2, canvas.height/2);
+                    ctx.font = "bold 40px Courier New";
+                    ctx.fillStyle = "#ff5555";
+                    ctx.textAlign = "center";
+                    ctx.shadowColor = "red"; ctx.shadowBlur = 20;
+                    ctx.fillText("⚠ WARNING ⚠", 0, -20);
+                    ctx.font = "bold 20px Courier New";
+                    ctx.fillStyle = "#fff";
+                    ctx.fillText("BOSS APPROACHING", 0, 20);
+                }}
                 ctx.restore();
             }}
         }}
 
-        // --- 控制輸入 ---
-        const joystickManager = nipplejs.create({{
+        const manager = nipplejs.create({{
             zone: document.getElementById('joystick-zone'),
-            mode: 'static', position: {{left: '70px', top: '70px'}}, color: 'white'
+            mode: 'static',
+            position: {{ left: '70px', top: '70px' }},
+            size: 100,
+            color: 'white'
         }});
+        manager.on('move', (evt, data) => {{ if(data.vector) socket.emit('move', {{ dx: data.vector.x, dy: -data.vector.y }}); }});
+        manager.on('end', () => {{ socket.emit('move', {{ dx: 0, dy: 0 }}); }});
 
-        let moveInterval;
-        joystickManager.on('move', (evt, data) => {{
-            if (!moveInterval) {{
-                moveInterval = setInterval(() => {{
-                    if (data.vector) socket.emit('move', {{ dx: data.vector.x, dy: -data.vector.y }});
-                }}, 1000 / 30);
-            }}
-        }});
-        joystickManager.on('end', () => {{ clearInterval(moveInterval); moveInterval = null; }});
-
-        document.getElementById('fire-btn').addEventListener('touchstart', (e) => {{
-            e.preventDefault();
+        // 動作處理
+        function doFire() {{
             socket.emit('shoot');
-            playSfx('p_shot'); // <--- 關鍵：前端直接播放，無延遲，不等待 Server
-        }});
-        document.getElementById('fire-btn').addEventListener('mousedown', (e) => {{
-            e.preventDefault();
-            socket.emit('shoot');
-            playSfx('p_shot'); // <--- 同上
+            // [優化] 本地預測：不等待 Server 回應，立即播放音效
+            playSfx('p_shot');
+        }}
+
+        function doSkill() {{
+            socket.emit('use_skill');
+        }}
+
+        // 綁定輸入
+        const fireBtn = document.getElementById('fire-btn');
+        fireBtn.addEventListener('touchstart', (e) => {{ e.preventDefault(); doFire(); }});
+        fireBtn.addEventListener('mousedown', (e) => {{ e.preventDefault(); doFire(); }});
+
+        const skillBtn = document.getElementById('skill-btn');
+        skillBtn.addEventListener('touchstart', (e) => {{ e.preventDefault(); doSkill(); }});
+        skillBtn.addEventListener('mousedown', (e) => {{ e.preventDefault(); doSkill(); }});
+
+        document.addEventListener('keydown', (e) => {{
+            if (e.code === 'Space') doFire();
+            if (e.key === 'q' || e.key === 'Q') doSkill();
         }});
 
-        document.getElementById('skill-btn').addEventListener('touchstart', (e) => {{
-            e.preventDefault(); socket.emit('use_skill');
-        }});
-        document.getElementById('skill-btn').addEventListener('mousedown', (e) => {{
-            e.preventDefault(); socket.emit('use_skill');
-        }});
-
-        // 登入與啟動
         document.getElementById('start-btn').onclick = function() {{
-            const name = document.getElementById('name-input').value || "Cell";
+            const name = document.getElementById('name-input').value || 'Cell';
             socket.emit('join_game', {{ name: name }});
             document.getElementById('login-overlay').style.display = 'none';
-            
-            // 啟動 BGM
-            gameStarted = true;
-            updateVolumes();
+            if(volBGM > 0) audioFiles.bgm.play().catch(e=>{{}});
         }};
     </script>
 </body>
