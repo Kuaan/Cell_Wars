@@ -1,5 +1,6 @@
 # v3.6.1 app.py (Optimized Frontend)
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Cell Wars V5", layout="wide")
 
