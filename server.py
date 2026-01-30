@@ -1,4 +1,4 @@
-#v3.7 server.py
+#v3.7.1 server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -87,11 +87,24 @@ def compress_state(state):
          compressed["skill_objects"].append({"x": int(s["x"]), "y": int(s["y"]), "skin": s["skin"]})
     return compressed
 
-def check_collision(rect1, rect2, size1, size2):
-    return (rect1['x'] < rect2['x'] + size2 and
-            rect1['x'] + size1 > rect2['x'] and
-            rect1['y'] < rect2['y'] + size2 and
-            rect1['y'] + size1 > rect2['y'])
+# 將原本的 check_collision 替換成這個
+def check_collision_circle(obj1, obj2):
+    # 假設 obj 的 x, y 是左上角座標，我們需要中心點
+    # 大部分 .io 遊戲這類判定會更直覺
+    r1 = obj1['size'] / 2
+    r2 = obj2['size'] / 2
+    
+    cx1 = obj1['x'] + r1
+    cy1 = obj1['y'] + r1
+    cx2 = obj2['x'] + r2
+    cy2 = obj2['y'] + r2
+    
+    # 計算距離平方 (避免開根號 sqrt，提升效能)
+    dist_sq = (cx1 - cx2)**2 + (cy1 - cy2)**2
+    radius_sum_sq = (r1 + r2)**2
+    
+    # 稍微縮小碰撞判定 (0.8)，讓玩家感覺「真的撞到了」才算，手感比較好
+    return dist_sq < (radius_sum_sq * 0.8)
 
 def spawn_boss():
     eid = "THE_BOSS"
