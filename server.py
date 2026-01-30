@@ -1,4 +1,4 @@
-#v3.6 server.py
+#v3.7 server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -8,7 +8,7 @@ import uuid
 import math
 import time
 
-# --- 設定與參數 (重點修改區：新增攻擊配置) ---
+# --- 設定與參數 ---
 CELL_CONFIG = {
     1: {"name": "Soldier", "hp": 5, "speed": 8, "bullet_speed": 7, "damage": 1, "color": "#50fa7b"},
     2: {"name": "Scout", "hp": 3, "speed": 12, "bullet_speed": 10, "damage": 1, "color": "#8be9fd"},
@@ -16,23 +16,15 @@ CELL_CONFIG = {
 }
 
 VIRUS_CONFIG = {
-    # 普通怪：單發，傷害1，頻率低
-    1: {
-        "hp": 3, "speed": 3, "size": 50, "score": 10, "prob": 0.7,
-        "attack": {"mode": "single", "damage": 1, "bullet_speed": 8, "fire_rate": 0.005} 
-    },
-    # 快速怪：單發，子彈快，頻率稍高
-    2: {
-        "hp": 1, "speed": 7, "size": 25, "score": 25, "prob": 0.2,
-        "attack": {"mode": "single", "damage": 1, "bullet_speed": 15, "fire_rate": 0.01}
-    },
-    # 菁英怪：雙管砲 (Double)，傷害高，子彈慢重
-    3: {
-        "hp": 15, "speed": 2, "size": 95, "score": 100, "prob": 0.1,
-        "attack": {"mode": "double", "damage": 2, "bullet_speed": 6, "fire_rate": 0.02} 
-    }
+    1: { "hp": 3, "speed": 3, "size": 50, "score": 10, "prob": 0.7,
+         "attack": {"mode": "single", "damage": 1, "bullet_speed": 8, "fire_rate": 0.005} },
+    2: { "hp": 1, "speed": 7, "size": 25, "score": 25, "prob": 0.2,
+         "attack": {"mode": "single", "damage": 1, "bullet_speed": 15, "fire_rate": 0.01} },
+    3: { "hp": 15, "speed": 2, "size": 95, "score": 100, "prob": 0.1,
+         "attack": {"mode": "double", "damage": 2, "bullet_speed": 6, "fire_rate": 0.02} }
 }
 
+# --- 初始化 Server ---
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 app = FastAPI()
 sio_app = socketio.ASGIApp(sio, app)
@@ -41,7 +33,7 @@ MAP_WIDTH = 600
 MAP_HEIGHT = 500
 MAX_ENEMIES = 5
 
-# --- 全域狀態變數 ---
+# --- 全域狀態 ---
 game_vars = {
     "boss_phase": "initial", 
     "phase_start_time": 0,    
@@ -57,37 +49,42 @@ game_state = {
     "warning_active": False 
 }
 
+# --- Helper: 穩定 FPS 的計時器 ---
+class LoopTimer:
+    def __init__(self, fps):
+        self.frame_duration = 1.0 / fps
+        self.next_tick = time.time()
+
+    async def tick(self):
+        now = time.time()
+        sleep_time = self.next_tick - now
+        if sleep_time > 0:
+            await asyncio.sleep(sleep_time)
+            self.next_tick += self.frame_duration
+        else:
+            # 如果延遲太嚴重，重置時間軸，避免追趕導致快轉
+            self.next_tick = now + self.frame_duration
+
 # --- 數據壓縮 ---
 def compress_state(state):
     compressed = {
-        "players": {},
-        "enemies": {},
-        "bullets": [],
-        "skill_objects": [],
-        "w": state["warning_active"] 
+        "players": {}, "enemies": {}, "bullets": [], "skill_objects": [], "w": state["warning_active"]
     }
-    
     for pid, p in state["players"].items():
-        safe_hp = max(0, int(p["hp"]))
         compressed["players"][pid] = {
             "x": int(p["x"]), "y": int(p["y"]), "skin": p["skin"], "name": p["name"],
-            "hp": safe_hp, "max_hp": int(p["max_hp"]), "score": int(p["score"]),
+            "hp": max(0, int(p["hp"])), "max_hp": int(p["max_hp"]), "score": int(p["score"]),
             "charge": p["charge"], "hit_accumulated": p["hit_accumulated"], "c": p["stats"]["color"]
         }
-        
     for eid, e in state["enemies"].items():
-        safe_hp = max(0, int(e["hp"]))
         compressed["enemies"][eid] = {
             "x": int(e["x"]), "y": int(e["y"]), "type": e["type"],
-            "size": e["size"], "hp": safe_hp, "max_hp": int(e["max_hp"])
+            "size": e["size"], "hp": max(0, int(e["hp"])), "max_hp": int(e["max_hp"])
         }
-        
     for b in state["bullets"]:
         compressed["bullets"].append({"x": int(b["x"]), "y": int(b["y"]), "owner": b["owner"]})
-        
     for s in state["skill_objects"]:
          compressed["skill_objects"].append({"x": int(s["x"]), "y": int(s["y"]), "skin": s["skin"]})
-         
     return compressed
 
 def check_collision(rect1, rect2, size1, size2):
@@ -106,47 +103,17 @@ def spawn_boss():
     game_vars["boss_phase"] = "boss_active"
     game_state["warning_active"] = False 
 
+# --- 主遊戲迴圈 ---
 async def game_loop():
     boss_shoot_toggle = 0
+    timer = LoopTimer(fps=30) # 鎖定 30 FPS
 
     while True:
         curr = time.time()
+        sfx_buffer = [] # 暫存這一幀的所有音效
 
-        # --- 魔王狀態機 ---
-        if game_vars["boss_phase"] == "countdown":
-            if curr - game_vars["phase_start_time"] > 25:
-                game_vars["boss_phase"] = "warning"
-                game_vars["phase_start_time"] = curr
-                game_state["warning_active"] = True
-                await sio.emit('sfx', {'type': 'boss_coming'}) 
-
-        elif game_vars["boss_phase"] == "warning":
-            if curr - game_vars["phase_start_time"] > 5:
-                spawn_boss()
-                await sio.emit('sfx', {'type': 'boss_coming'}) 
-
-        elif game_vars["boss_phase"] == "collecting":
-            pass
-
-        # --- 敵人生成 ---
-        if len(game_state["enemies"]) < MAX_ENEMIES:
-            if game_vars["boss_phase"] != "boss_active":
-                eid = str(uuid.uuid4())
-                rand_val = random.random()
-                if rand_val < VIRUS_CONFIG[3]["prob"]: v_type = 3
-                elif rand_val < VIRUS_CONFIG[3]["prob"] + VIRUS_CONFIG[2]["prob"]: v_type = 2
-                else: v_type = 1
-                stats = VIRUS_CONFIG[v_type]
-                game_state["enemies"][eid] = {
-                    "x": random.randint(0, MAP_WIDTH - stats["size"]),
-                    "y": random.randint(-100, 0), "type": v_type,
-                    "hp": stats["hp"], "max_hp": stats["hp"],
-                    "speed": stats["speed"], "size": stats["size"],
-                    "score": stats["score"], "move_timer": 0
-                }
-
-        # --- 擊殺處理 ---
-        def handle_enemy_death(enemy):
+        # --- 內部函數：處理怪物死亡 (閉包以訪問 sfx_buffer) ---
+        def handle_enemy_death_logic(enemy):
             if enemy['type'] == 3:
                 if game_vars["boss_phase"] == "initial":
                     game_vars["boss_phase"] = "countdown"
@@ -157,12 +124,41 @@ async def game_loop():
                         game_vars["boss_phase"] = "warning"
                         game_vars["phase_start_time"] = time.time()
                         game_state["warning_active"] = True
-                        asyncio.create_task(sio.emit('sfx', {'type': 'boss_coming'}))
+                        sfx_buffer.append({'type': 'boss_coming'})
 
             if enemy['type'] == 999:
                 game_vars["boss_phase"] = "collecting"
                 game_vars["elite_kill_count"] = 0
                 game_state["warning_active"] = False
+
+        # --- 魔王狀態機 ---
+        if game_vars["boss_phase"] == "countdown":
+            if curr - game_vars["phase_start_time"] > 25:
+                game_vars["boss_phase"] = "warning"
+                game_vars["phase_start_time"] = curr
+                game_state["warning_active"] = True
+                sfx_buffer.append({'type': 'boss_coming'})
+
+        elif game_vars["boss_phase"] == "warning":
+            if curr - game_vars["phase_start_time"] > 5:
+                spawn_boss()
+                sfx_buffer.append({'type': 'boss_coming'})
+
+        # --- 敵人生成 ---
+        if len(game_state["enemies"]) < MAX_ENEMIES and game_vars["boss_phase"] != "boss_active":
+            eid = str(uuid.uuid4())
+            rand_val = random.random()
+            if rand_val < VIRUS_CONFIG[3]["prob"]: v_type = 3
+            elif rand_val < VIRUS_CONFIG[3]["prob"] + VIRUS_CONFIG[2]["prob"]: v_type = 2
+            else: v_type = 1
+            stats = VIRUS_CONFIG[v_type]
+            game_state["enemies"][eid] = {
+                "x": random.randint(0, MAP_WIDTH - stats["size"]),
+                "y": random.randint(-100, 0), "type": v_type,
+                "hp": stats["hp"], "max_hp": stats["hp"],
+                "speed": stats["speed"], "size": stats["size"],
+                "score": stats["score"], "move_timer": 0
+            }
 
         # --- 技能邏輯 ---
         active_skills = []
@@ -179,11 +175,10 @@ async def game_loop():
                         enemy["hp"] -= obj["damage"]
                         obj["durability"] -= 1
                         
-                        if enemy["type"] == 999: await sio.emit('sfx', {'type': 'boss_hitted'})
-                        else: await sio.emit('sfx', {'type': 'enemy_hitted'})
+                        sfx_buffer.append({'type': 'boss_hitted' if enemy["type"] == 999 else 'enemy_hitted'})
 
                         if enemy["hp"] <= 0:
-                            handle_enemy_death(enemy)
+                            handle_enemy_death_logic(enemy)
                             if obj["owner_id"] in game_state["players"]:
                                 p = game_state["players"][obj["owner_id"]]
                                 p["score"] += enemy["score"]
@@ -202,51 +197,54 @@ async def game_loop():
             b['x'] += b['dx']
             b['y'] += b['dy']
 
-            if -50 <= b['x'] <= MAP_WIDTH + 50 and -50 <= b['y'] <= MAP_HEIGHT + 50:
-                hit = False
-                if b['owner'] not in ['enemy', 'boss']:
-                    for eid, enemy in list(game_state["enemies"].items()):
-                        if check_collision(b, enemy, 5, enemy['size']):
-                            enemy['hp'] -= b.get('damage', 1)
-                            hit = True
-                            
-                            if enemy['type'] == 999: await sio.emit('sfx', {'type': 'boss_hitted'})
-                            else: await sio.emit('sfx', {'type': 'enemy_hitted'})
+            # 邊界優化：出界太遠直接刪除
+            if not (-50 <= b['x'] <= MAP_WIDTH + 50 and -50 <= b['y'] <= MAP_HEIGHT + 50):
+                continue
 
+            hit = False
+            # 玩家打怪
+            if b['owner'] not in ['enemy', 'boss']:
+                for eid, enemy in list(game_state["enemies"].items()):
+                    if check_collision(b, enemy, 5, enemy['size']):
+                        enemy['hp'] -= b.get('damage', 1)
+                        hit = True
+                        sfx_buffer.append({'type': 'boss_hitted' if enemy['type'] == 999 else 'enemy_hitted'})
+
+                        if b['owner'] in game_state["players"]:
+                            p = game_state["players"][b['owner']]
+                            p["hit_accumulated"] += 1
+                            if p["hit_accumulated"] >= 20:
+                                p["hit_accumulated"] = 0
+                                p["charge"] = min(3, p["charge"] + 1)
+
+                        if enemy['hp'] <= 0:
+                            handle_enemy_death_logic(enemy)
                             if b['owner'] in game_state["players"]:
-                                p = game_state["players"][b['owner']]
-                                p["hit_accumulated"] += 1
-                                if p["hit_accumulated"] >= 20:
-                                    p["hit_accumulated"] = 0
-                                    p["charge"] = min(3, p["charge"] + 1)
-
-                            if enemy['hp'] <= 0:
-                                handle_enemy_death(enemy)
-                                if b['owner'] in game_state["players"]:
-                                    game_state["players"][b['owner']]['score'] += enemy['score']
-                                if eid in game_state["enemies"]: game_state["enemies"].pop(eid)
-                            break
-                else:
-                    # 敵人子彈打玩家
-                    for pid, player in list(game_state["players"].items()):
-                        if check_collision(b, player, b.get('size', 5), 30):
-                            player['hp'] -= b.get('damage', 1)
-                            await sio.emit('sfx', {'type': 'character_hitted'})
-                            hit = True
-                            if player['hp'] <= 0:
-                                # 玩家死亡
-                                player['x'], player['y'] = random.randint(100, 500), 400
-                                player['hp'] = player['max_hp']
-                                player['score'] = int(player['score'] / 2)
-                                player['charge'] = 0
-                                player['hit_accumulated'] = 0
-                            break
-                if not hit: active_bullets.append(b)
+                                game_state["players"][b['owner']]['score'] += enemy['score']
+                            if eid in game_state["enemies"]: game_state["enemies"].pop(eid)
+                        break
+            # 怪物打玩家
+            else:
+                for pid, player in list(game_state["players"].items()):
+                    if check_collision(b, player, b.get('size', 5), 30):
+                        player['hp'] -= b.get('damage', 1)
+                        sfx_buffer.append({'type': 'character_hitted'})
+                        hit = True
+                        if player['hp'] <= 0:
+                            player['x'], player['y'] = random.randint(100, 500), 400
+                            player['hp'] = player['max_hp']
+                            player['score'] = int(player['score'] / 2)
+                            player['charge'] = 0
+                            player['hit_accumulated'] = 0
+                        break
+            
+            if not hit: active_bullets.append(b)
         game_state["bullets"] = active_bullets
 
-        # --- AI 移動與攻擊邏輯 (重點修改) ---
+        # --- AI 移動與攻擊 ---
         for eid, enemy in list(game_state["enemies"].items()):
-            if enemy['type'] == 999: # Boss
+            # Boss Logic
+            if enemy['type'] == 999: 
                 enemy['move_timer'] += 1
                 if enemy['move_timer'] > 60:
                     enemy['dx'] = random.choice([-2, -1, 0, 1, 2])
@@ -255,18 +253,20 @@ async def game_loop():
                 enemy['x'] = max(0, min(MAP_WIDTH - enemy['size'], enemy['x'] + enemy.get('dx', 0)))
                 enemy['y'] = max(0, min(MAP_HEIGHT - enemy['size'], enemy['y'] + enemy.get('dy', 0)))
 
+                # Boss 撞人
                 for pid, player in game_state["players"].items():
                     if check_collision(player, enemy, 30, enemy['size']):
                         if random.random() < 0.05:
                             player['hp'] -= 1
-                            await sio.emit('sfx', {'type': 'character_hitted'})
+                            sfx_buffer.append({'type': 'character_hitted'})
                             if player['hp'] <= 0:
                                 player['x'], player['y'] = random.randint(100, 500), 400
                                 player['hp'] = player['max_hp']
                                 player['score'] = int(player['score'] / 2)
                                 player['charge'] = 0
                                 player['hit_accumulated'] = 0
-
+                
+                # Boss 開火
                 is_enraged = (enemy['hp'] < enemy['max_hp'] * 0.5)
                 fire_rate = 0.05 if is_enraged else 0.03
                 if random.random() < fire_rate:
@@ -277,10 +277,10 @@ async def game_loop():
                             "x": cx, "y": cy, "dx": dx, "dy": dy,
                             "owner": "boss", "damage": 1, "size": 10
                         })
-                    await sio.emit('sfx', {'type': 'boss_shot'})
+                    sfx_buffer.append({'type': 'boss_shot'})
             
-            else: # 一般怪物 (Type 1, 2, 3)
-                # 1. 移動
+            # Normal Enemy Logic
+            else: 
                 enemy['y'] += enemy['speed'] * 0.5
                 enemy['move_timer'] += 1
                 if enemy['move_timer'] > 30:
@@ -289,12 +289,12 @@ async def game_loop():
                 enemy['x'] = max(0, min(MAP_WIDTH - enemy['size'], enemy['x']))
                 if enemy['y'] > MAP_HEIGHT: enemy['y'] = -50
                 
-                # 2. 碰觸傷害 (含死亡檢查)
+                # 小怪撞人
                 for pid, player in game_state["players"].items():
                     if check_collision(player, enemy, 30, enemy['size']):
                         if random.random() < 0.1: 
                             player['hp'] -= 1
-                            await sio.emit('sfx', {'type': 'character_hitted'})
+                            sfx_buffer.append({'type': 'character_hitted'})
                             if player['hp'] <= 0:
                                 player['x'], player['y'] = random.randint(100, 500), 400
                                 player['hp'] = player['max_hp']
@@ -302,39 +302,41 @@ async def game_loop():
                                 player['charge'] = 0
                                 player['hit_accumulated'] = 0
 
-                # 3. 攻擊邏輯 (讀取 Config)
+                # 小怪開火
                 atk_stats = VIRUS_CONFIG[enemy['type']]['attack']
-                
                 if random.random() < atk_stats['fire_rate']:
                     center_x = enemy['x'] + enemy['size'] / 2
                     bottom_y = enemy['y'] + enemy['size']
-                    
                     bullets_to_spawn = []
-                    
-                    # 雙管砲邏輯 (Double)
                     if atk_stats['mode'] == 'double':
-                         # 左管 (-15) 和 右管 (+15)
                         bullets_to_spawn.append({"x": center_x - 15, "y": bottom_y})
                         bullets_to_spawn.append({"x": center_x + 15, "y": bottom_y})
-                    # 單發邏輯 (Single)
                     else:
                         bullets_to_spawn.append({"x": center_x, "y": bottom_y})
 
-                    # 統一生成子彈
                     for b_pos in bullets_to_spawn:
                         game_state["bullets"].append({
-                            "x": b_pos['x'], 
-                            "y": b_pos['y'],
-                            "dx": 0, 
-                            "dy": atk_stats['bullet_speed'], # 使用設定檔速度
-                            "owner": "enemy", 
-                            "damage": atk_stats['damage'],   # 使用設定檔傷害
-                            "size": 6 if atk_stats['damage'] > 1 else 5 # 傷害高的子彈稍微大一點
+                            "x": b_pos['x'], "y": b_pos['y'], "dx": 0, "dy": atk_stats['bullet_speed'],
+                            "owner": "enemy", "damage": atk_stats['damage'],
+                            "size": 6 if atk_stats['damage'] > 1 else 5
                         })
 
-        await sio.emit('state_update', compress_state(game_state))
-        await asyncio.sleep(0.05)
+        # --- 網路傳輸優化 (Batch Send) ---
+        emit_tasks = [sio.emit('state_update', compress_state(game_state))]
+        
+        # 音效去重：同一幀同一種聲音只發一次
+        if sfx_buffer:
+            unique_sfx = list({v['type']: v for v in sfx_buffer}.values())
+            for sfx in unique_sfx:
+                emit_tasks.append(sio.emit('sfx', sfx))
 
+        # 並行發送所有封包
+        await asyncio.gather(*emit_tasks)
+
+        # 智慧等待，維持 FPS
+        await timer.tick()
+
+# --- 事件處理 ---
 @app.on_event("startup")
 async def startup_event(): asyncio.create_task(game_loop())
 
