@@ -1,3 +1,4 @@
+#v3.6.2 server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -9,9 +10,9 @@ import time
 
 # --- 設定與參數 ---
 CELL_CONFIG = {
-    1: {"name": "Soldier", "hp": 5, "speed": 8, "bullet_speed": 7, "damage": 1, "color": "#50fa7b"},
-    2: {"name": "Scout", "hp": 3, "speed": 12, "bullet_speed": 10, "damage": 1, "color": "#8be9fd"},
-    3: {"name": "Tank", "hp": 8, "speed": 5, "bullet_speed": 6, "damage": 2, "color": "#ff5555"}
+    1: {"name": "Soldier", "hp": 5, "speed": 8, "bullet_speed": 7, "damage": 1, "color": "#50fa7b", "fire_rate": 0.25},
+    2: {"name": "Scout", "hp": 3, "speed": 12, "bullet_speed": 10, "damage": 1, "color": "#8be9fd", "fire_rate": 0.15},
+    3: {"name": "Tank", "hp": 8, "speed": 5, "bullet_speed": 6, "damage": 2, "color": "#ff5555", "fire_rate": 0.4}
 }
 
 VIRUS_CONFIG = {
@@ -399,7 +400,8 @@ async def join_game(sid, data):
         "stats": CELL_CONFIG[skin_type], 
         "hp": CELL_CONFIG[skin_type]["hp"], "max_hp": CELL_CONFIG[skin_type]["hp"],
         "score": 0, "charge": 0, "hit_accumulated": 0, "last_skill_time": 0,
-        "invincible_until": time.time() + 3.0 # 剛加入有保護
+        "invincible_until": time.time() + 3.0,
+        "last_shot_time": 0  # <--- 新增：記錄上次射擊時間
     }
 
 @sio.event
@@ -417,11 +419,19 @@ async def move(sid, data):
 async def shoot(sid):
     if sid in game_state["players"]:
         p = game_state["players"][sid]
+        curr = time.time()
+        
+        # --- 驗證射擊冷卻 (Server 端防作弊) ---
+        # 如果距離上次射擊時間太短，則忽略這次請求
+        if curr - p.get("last_shot_time", 0) < p["stats"]["fire_rate"]:
+            return 
+
+        p["last_shot_time"] = curr # 更新射擊時間
+
         game_state["bullets"].append({
             "x": p['x'] + 15, "y": p['y'], "dx": 0, "dy": -p['stats']['bullet_speed'],
             "owner": sid, "damage": p['stats']['damage'], "size": 5
         })
-        # 注意：這裡不再廣播 'shoot' 音效，因為前端已經自己播了
 
 @sio.event
 async def use_skill(sid):
