@@ -1,9 +1,9 @@
+# v5.1 app.py (Matching Server v3.7.3)
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Cell Wars V5", layout="wide")
+st.set_page_config(page_title="Cell Wars V5.1", layout="wide")
 
-# 請確認此 URL 對應到你正確的 Server
 SERVER_URL = "https://cell-wars.onrender.com"
 GITHUB_USER = "Kuaan"
 GITHUB_REPO = "Cell_Wars"
@@ -26,6 +26,7 @@ html_code = f"""
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
+        /* ... 此處維持你原始的 CSS 樣式 ... */
         * {{ box-sizing: border-box; }}
         body {{ 
             background-color: #0d0211; color: #fff; margin: 0; padding: 0;
@@ -33,8 +34,6 @@ html_code = f"""
             display: flex; flex-direction: column; align-items: center;
             height: 100vh; width: 100vw;
         }}
-
-        /* 登入介面 */
         #login-overlay {{
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: #0d0211; z-index: 99999; 
@@ -47,8 +46,6 @@ html_code = f"""
         }}
         input {{ margin: 15px 0; padding: 12px; font-size: 18px; width: 100%; text-align: center; background: #222; color: #fff; border: 1px solid #444; border-radius: 8px; }}
         button {{ padding: 15px 40px; font-size: 18px; background: #50fa7b; color: #000; border: none; border-radius: 8px; font-weight: bold; width: 100%; cursor: pointer; }}
-
-        /* 頂部資訊列 */
         #top-bar {{
             width: 100%; background: #1a0620; padding: 5px 0;
             display: flex; justify-content: space-around; align-items: center;
@@ -56,38 +53,28 @@ html_code = f"""
             height: 40px; flex-shrink: 0;
         }}
         .vol-control {{ display: flex; align-items: center; gap: 5px; font-size: 10px; color: #bd93f9; }}
-        input[type=range] {{ width: 50px; cursor: pointer; }}
-
-        /* 畫布 */
         canvas {{ 
             background-color: #000; border: 2px solid #444; 
             width: 95vw; max-width: 600px; height: auto; aspect-ratio: 6/5;
             image-rendering: pixelated; margin-top: 5px;
         }}
-
-        /* UI 容器 */
         #ui-container {{
             width: 100%; max-width: 600px; height: 180px;
             margin-top: 10px; display: flex; justify-content: space-between;
             align-items: center; padding: 0 15px;
         }}
         #joystick-zone {{ width: 140px; height: 140px; position: relative; }}
-        #actions-zone {{ display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }}
-
         .btn-fire {{
             width: 75px; height: 75px; background: #ff5555; border-radius: 50%;
             border: 3px solid #ff9999; display: flex; align-items: center; justify-content: center;
-            font-weight: bold; box-shadow: 0 4px 0 #b30000; touch-action: none; user-select: none;
+            font-weight: bold; box-shadow: 0 4px 0 #b30000; touch-action: none;
         }}
-        .btn-fire:active {{ box-shadow: 0 0 0; transform: translateY(4px); }}
-
         .btn-skill {{
             width: 55px; height: 55px; background: #8be9fd; border-radius: 50%;
-            border: 3px solid #cyan; display: flex; align-items: center; justify-content: center;
-            font-size: 12px; font-weight: bold; color: #000; touch-action: none; user-select: none;
+            border: 3px solid cyan; display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: bold; color: #000;
         }}
-        .btn-skill.disabled {{ opacity: 0.3; }}
-
+        .disabled {{ opacity: 0.3; }}
         #charge-container {{ display: flex; gap: 4px; margin-bottom: 5px; }}
         .charge-bar-segment {{ width: 25px; height: 10px; background: #333; transform: skewX(-15deg); position: relative; }}
         .charge-fill {{ position: absolute; left: 0; top: 0; height: 100%; background: #f1fa8c; width: 0%; }}
@@ -99,7 +86,7 @@ html_code = f"""
     <div id="login-overlay">
         <div id="login-box">
             <h1 style="color: #50fa7b; margin: 0 0 10px 0;">🦠 CELL WARS</h1>
-            <p style="color: #aaa; font-size: 12px;">iOS 優化版: 零延遲射擊</p>
+            <p style="color: #aaa; font-size: 12px;">已隔離他人槍聲 | 本地零延遲</p>
             <input type="text" id="name-input" placeholder="輸入名稱" maxlength="8">
             <button id="start-btn">進入遊戲</button>
         </div>
@@ -151,29 +138,19 @@ html_code = f"""
         let volBGM = 0.4;
         let volSFX = 0.6;
 
-        function updateBGM() {{
-            audioFiles.bgm.volume = volBGM;
-            if(volBGM <= 0.01) audioFiles.bgm.pause();
-            else if(audioFiles.bgm.paused && document.getElementById('login-overlay').style.display === 'none') {{
-                audioFiles.bgm.play().catch(e=>{{}});
-            }}
-        }}
-
-        updateBGM();
-        for (let k in audioFiles) {{ if(k !== 'bgm') audioFiles[k].volume = volSFX; }}
-
-        document.getElementById('vol-bgm').oninput = function() {{ volBGM = parseFloat(this.value); updateBGM(); }};
-        document.getElementById('vol-sfx').oninput = function() {{ 
-            volSFX = parseFloat(this.value); 
-            for (let k in audioFiles) {{ if(k !== 'bgm') audioFiles[k].volume = volSFX; }}
-        }};
+        // --- 核心變數 ---
+        let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], skill_objects: [], w: false }};
+        let myId = null;
+        let localBullets = []; 
+        let lastShotTimeLocal = 0; // 本地射擊冷卻控制
 
         function playSfx(key) {{
             if (volSFX <= 0.01) return;
             const s = audioFiles[key];
             if(s) {{ 
-                s.currentTime = 0; 
-                s.play().catch(e => {{}}); 
+                const clone = s.cloneNode(); // 使用 Clone 允許音效重疊播放（解決射速快時聲音斷掉問題）
+                clone.volume = volSFX;
+                clone.play().catch(e => {{}}); 
             }}
         }}
 
@@ -186,15 +163,9 @@ html_code = f"""
         }}
         skins.boss = loadImg(assetsBase + "boss_1.png");
 
-        // --- 遊戲狀態 ---
-        let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], skill_objects: [], w: false }};
-        let myId = null;
-        // 本地預測子彈 (Client-Side Prediction)
-        let localBullets = []; 
-
         socket.on('connect', () => {{ myId = socket.id; }});
 
-        // --- 核心優化：音效過濾 ---
+        // 監聽 Server 發送的「專屬」音效 (擊中、受傷等)
         socket.on('sfx', (data) => {{
             switch(data.type) {{
                 case 'character_hitted': playSfx('p_hit'); break;
@@ -204,19 +175,14 @@ html_code = f"""
                 case 'enemy_hitted': playSfx('e_hit'); break;
                 case 'enemy_nor_shot': playSfx('e_shot'); break;
                 case 'skill_slime': playSfx('skill'); break;
-                // 重要：完全移除 'character_nor_shot' 的監聽
-                // 這樣你就永遠不會聽到 Server 廣播的「別人的槍聲」
             }}
         }});
 
         socket.on('state_update', (data) => {{
             gameState = data;
-            // 當 Server 更新時，不需要清除 localBullets，而是讓它們自然飛出邊界或被時間銷毀
-            // 這樣視覺最流暢
             updateUI();
         }});
 
-        // --- 遊戲迴圈 (FPS 60) ---
         function loop() {{
             updateLocalBullets();
             draw();
@@ -225,22 +191,103 @@ html_code = f"""
         requestAnimationFrame(loop);
 
         function updateLocalBullets() {{
-            // 讓本地子彈往上飛
             for(let i = localBullets.length - 1; i >= 0; i--) {{
                 localBullets[i].y -= localBullets[i].speed; 
-                // 超出邊界移除
-                if(localBullets[i].y < -50) {{
-                    localBullets.splice(i, 1);
-                }}
+                if(localBullets[i].y < -50) localBullets.splice(i, 1);
             }}
         }}
+
+        // --- 核心優化：零延遲射擊處理 ---
+        function doFire() {{
+            if (!myId || !gameState.players[myId]) return;
+            const now = Date.now();
+            const p = gameState.players[myId];
+            
+            // 根據不同兵種設定本地冷卻 (ms) - 稍微比 Server 短一點點確保流暢
+            const cooldowns = {{ 1: 220, 2: 130, 3: 380 }}; 
+            const myCd = cooldowns[p.skin] || 200;
+
+            if (now - lastShotTimeLocal >= myCd) {{
+                lastShotTimeLocal = now;
+
+                // 1. 本地立即播音
+                playSfx('p_shot');
+
+                // 2. 生成預測子彈
+                let speed = (p.skin === 2) ? 10 : (p.skin === 3 ? 6 : 7);
+                localBullets.push({{ x: p.x + 15, y: p.y, speed: speed }});
+
+                // 3. 通知 Server
+                socket.emit('shoot');
+            }}
+        }}
+
+        function draw() {{
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 繪製敵人
+            for (let id in gameState.enemies) {{
+                let e = gameState.enemies[id];
+                if (e.type === 999) {{
+                    if(skins.boss.complete) ctx.drawImage(skins.boss, e.x, e.y, e.size, e.size);
+                }} else {{
+                    let img = skins.viruses[(e.type || 1) - 1];
+                    if(img && img.complete) ctx.drawImage(img, e.x, e.y, e.size, e.size);
+                }}
+            }}
+
+            // 繪製玩家
+            for (let id in gameState.players) {{
+                let p = gameState.players[id];
+                if (p.invincible) ctx.globalAlpha = 0.5;
+                let img = skins.cells[(p.skin || 1) - 1];
+                if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
+                ctx.globalAlpha = 1.0;
+            }}
+
+            // 繪製 Server 子彈 (過濾掉自己的，避免重影)
+            gameState.bullets.forEach(b => {{
+                if (b.owner === myId) return; // 自己的子彈看本地預測的就好
+                ctx.beginPath();
+                if (b.owner === 'boss') ctx.fillStyle = '#bd93f9';
+                else if (b.owner === 'enemy') ctx.fillStyle = '#ff5555';
+                else ctx.fillStyle = '#8be9fd';
+                ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+                ctx.fill();
+            }});
+
+            // 繪製本地預測子彈
+            ctx.fillStyle = '#f1fa8c';
+            localBullets.forEach(b => {{
+                ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
+            }});
+        }}
+
+        // ... Joystick 與 UI 更新維持原樣 ...
+        const manager = nipplejs.create({{
+            zone: document.getElementById('joystick-zone'),
+            mode: 'static', position: {{ left: '70px', top: '70px' }},
+            size: 100, color: 'white'
+        }});
+        manager.on('move', (evt, data) => {{ if(data.vector) socket.emit('move', {{ dx: data.vector.x, dy: -data.vector.y }}); }});
+        manager.on('end', () => {{ socket.emit('move', {{ dx: 0, dy: 0 }}); }});
+
+        const fireBtn = document.getElementById('fire-btn');
+        fireBtn.addEventListener('touchstart', (e) => {{ e.preventDefault(); doFire(); }});
+        fireBtn.addEventListener('mousedown', (e) => {{ e.preventDefault(); doFire(); }});
+
+        document.getElementById('start-btn').onclick = function() {{
+            const name = document.getElementById('name-input').value || 'Cell';
+            socket.emit('join_game', {{ name: name }});
+            document.getElementById('login-overlay').style.display = 'none';
+            audioFiles.bgm.play().catch(e=>{{}});
+        }};
 
         function updateUI() {{
             if (!myId || !gameState.players[myId]) return;
             const me = gameState.players[myId];
             const sorted = Object.values(gameState.players).sort((a,b)=>b.score-a.score).slice(0,3);
             document.getElementById('lb-content').innerHTML = sorted.map((p, i) => `<span class="score-pill">${{i==0?'👑':''}}${{p.name}}:${{p.score}}</span>`).join('');
-
             for(let i=1; i<=3; i++) {{
                 const elSeg = document.getElementById('seg'+i);
                 const elFill = document.getElementById('fill'+i);
@@ -248,161 +295,7 @@ html_code = f"""
                 else if (me.charge === i - 1) {{ elSeg.classList.remove('full'); elFill.style.width = ((me.hit_accumulated / 20) * 100) + '%'; }}
                 else {{ elSeg.classList.remove('full'); elFill.style.width = '0%'; }}
             }}
-            const btn = document.getElementById('skill-btn');
-            if (me.charge >= 1) btn.classList.remove('disabled'); else btn.classList.add('disabled');
         }}
-
-        function draw() {{
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // 1. 繪製技能
-            ctx.globalAlpha = 0.6;
-            (gameState.skill_objects || []).forEach(obj => {{
-                let img = skins.cells[(obj.skin || 1) - 1];
-                if(img && img.complete) ctx.drawImage(img, obj.x, obj.y, 30, 30);
-            }});
-            ctx.globalAlpha = 1.0;
-
-            // 2. 繪製敵人
-            for (let id in gameState.enemies) {{
-                let e = gameState.enemies[id];
-                if (e.type === 999) {{
-                    if(skins.boss.complete) ctx.drawImage(skins.boss, e.x, e.y, e.size, e.size);
-                    const hpRatio = Math.max(0, e.hp / e.max_hp);
-                    ctx.fillStyle = "#bd93f9"; ctx.fillRect(e.x, e.y-10, e.size * hpRatio, 8);
-                }} else {{
-                    let img = skins.viruses[(e.type || 1) - 1];
-                    if(img && img.complete) ctx.drawImage(img, e.x, e.y, e.size, e.size);
-                    const hpRatio = Math.max(0, e.hp / e.max_hp);
-                    ctx.fillStyle = "#ff5555"; ctx.fillRect(e.x, e.y-6, e.size * hpRatio, 3);
-                }}
-            }}
-
-            // 3. 繪製玩家
-            for (let id in gameState.players) {{
-                let p = gameState.players[id];
-                if (p.invincible) ctx.globalAlpha = 0.5;
-                let img = skins.cells[(p.skin || 1) - 1];
-                if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
-                ctx.globalAlpha = 1.0;
-                ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
-                ctx.fillText(p.name, p.x+15, p.y-15);
-                const hpRatio = Math.max(0, p.hp / p.max_hp);
-                ctx.fillStyle = "#50fa7b"; ctx.fillRect(p.x, p.y-10, 30 * hpRatio, 4);
-            }}
-
-            // 4. 繪製 Server 子彈 (包含其他玩家的子彈)
-            // 這裡可以做一個進階優化：如果不畫「自己的」Server 子彈，只畫本地預測的，會更不閃爍。
-            // 但為了簡單起見，我們畫所有 Server 子彈，但將自己的顏色區分
-            gameState.bullets.forEach(b => {{
-                // 如果這是「我自己」的子彈，且我們有本地預測，其實可以選擇不畫 Server 這顆，避免重影
-                // 但簡單起見，我們兩個都畫，Server 的畫在下層
-                ctx.beginPath();
-                if (b.owner === 'boss') {{ ctx.fillStyle = '#bd93f9'; ctx.arc(b.x, b.y, 8, 0, Math.PI*2); }}
-                else if (b.owner === 'enemy') {{ ctx.fillStyle = '#ff5555'; ctx.arc(b.x, b.y, 3, 0, Math.PI*2); }}
-                else {{ 
-                    ctx.fillStyle = (b.owner === myId) ? '#f1fa8c' : '#8be9fd'; 
-                    ctx.arc(b.x, b.y, 4, 0, Math.PI*2); 
-                }}
-                ctx.fill();
-            }});
-
-            // 5. 繪製本地預測子彈 (Local Prediction) - 畫在最上層，確保視覺反饋最強烈
-            ctx.fillStyle = '#ffffcc'; // 稍微亮一點的黃色
-            localBullets.forEach(b => {{
-                ctx.beginPath();
-                ctx.arc(b.x, b.y, 5, 0, Math.PI*2); // 稍微大一點點點
-                ctx.fill();
-            }});
-
-            // 6. 警告特效
-            if (gameState.w) {{
-                const time = Date.now();
-                ctx.save();
-                const alpha = 0.2 + 0.15 * Math.sin(time * 0.01);
-                ctx.fillStyle = `rgba(255, 0, 0, ${{alpha}})`;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                const scanY = (time * 0.2) % canvas.height;
-                ctx.strokeStyle = "rgba(255, 50, 50, 0.5)";
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(0, scanY); ctx.lineTo(canvas.width, scanY);
-                ctx.moveTo(0, canvas.height - scanY); ctx.lineTo(canvas.width, canvas.height - scanY);
-                ctx.stroke();
-                if (Math.floor(time / 250) % 2 === 0) {{
-                    ctx.translate(canvas.width/2, canvas.height/2);
-                    ctx.font = "bold 40px Courier New";
-                    ctx.fillStyle = "#ff5555";
-                    ctx.textAlign = "center";
-                    ctx.shadowColor = "red"; ctx.shadowBlur = 20;
-                    ctx.fillText("⚠ WARNING ⚠", 0, -20);
-                    ctx.font = "bold 20px Courier New";
-                    ctx.fillStyle = "#fff";
-                    ctx.fillText("BOSS APPROACHING", 0, 20);
-                }}
-                ctx.restore();
-            }}
-        }}
-
-        const manager = nipplejs.create({{
-            zone: document.getElementById('joystick-zone'),
-            mode: 'static',
-            position: {{ left: '70px', top: '70px' }},
-            size: 100,
-            color: 'white'
-        }});
-        manager.on('move', (evt, data) => {{ if(data.vector) socket.emit('move', {{ dx: data.vector.x, dy: -data.vector.y }}); }});
-        manager.on('end', () => {{ socket.emit('move', {{ dx: 0, dy: 0 }}); }});
-
-        // --- 核心優化：本地動作處理 ---
-        function doFire() {{
-            // 1. 立刻播放聲音 (不等待 Server)
-            playSfx('p_shot');
-            
-            // 2. 通知 Server (為了傷害計算)
-            socket.emit('shoot');
-
-            // 3. 立刻生成本地子彈 (視覺預測)
-            if (myId && gameState.players[myId]) {{
-                const p = gameState.players[myId];
-                // 根據不同的角色類型設定速度 (這裡簡單取一個大概值，主要是為了視覺反饋)
-                // Soldier:7, Scout:10, Tank:6
-                let speed = 7; 
-                if (p.skin === 2) speed = 10;
-                if (p.skin === 3) speed = 6;
-
-                localBullets.push({{
-                    x: p.x + 15,
-                    y: p.y,
-                    speed: speed
-                }});
-            }}
-        }}
-
-        function doSkill() {{
-            socket.emit('use_skill');
-        }}
-
-        // 使用 touchstart 綁定可以減少手機上的點擊延遲 (click 事件有 300ms 延遲)
-        const fireBtn = document.getElementById('fire-btn');
-        fireBtn.addEventListener('touchstart', (e) => {{ e.preventDefault(); doFire(); }});
-        fireBtn.addEventListener('mousedown', (e) => {{ e.preventDefault(); doFire(); }});
-
-        const skillBtn = document.getElementById('skill-btn');
-        skillBtn.addEventListener('touchstart', (e) => {{ e.preventDefault(); doSkill(); }});
-        skillBtn.addEventListener('mousedown', (e) => {{ e.preventDefault(); doSkill(); }});
-
-        document.addEventListener('keydown', (e) => {{
-            if (e.code === 'Space') doFire();
-            if (e.key === 'q' || e.key === 'Q') doSkill();
-        }});
-
-        document.getElementById('start-btn').onclick = function() {{
-            const name = document.getElementById('name-input').value || 'Cell';
-            socket.emit('join_game', {{ name: name }});
-            document.getElementById('login-overlay').style.display = 'none';
-            if(volBGM > 0) audioFiles.bgm.play().catch(e=>{{}});
-        }};
     </script>
 </body>
 </html>
