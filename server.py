@@ -1,4 +1,4 @@
-# v3.7.3 server.py (FastAPI Optimized + Rate Limit + Unicast SFX)
+# v3.7.2 server.py (Optimized)
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -9,11 +9,10 @@ import math
 import time
 
 # --- 設定與參數 ---
-# [修改] 加入 'cooldown' (秒)，對應前端的射速限制
 CELL_CONFIG = {
-    1: {"name": "Soldier", "hp": 5, "speed": 8, "bullet_speed": 7, "damage": 1, "color": "#50fa7b", "cooldown": 0.25},
-    2: {"name": "Scout", "hp": 3, "speed": 12, "bullet_speed": 10, "damage": 1, "color": "#8be9fd", "cooldown": 0.15},
-    3: {"name": "Tank", "hp": 8, "speed": 5, "bullet_speed": 6, "damage": 2, "color": "#ff5555", "cooldown": 0.4}
+    1: {"name": "Soldier", "hp": 5, "speed": 8, "bullet_speed": 7, "damage": 1, "color": "#50fa7b"},
+    2: {"name": "Scout", "hp": 3, "speed": 12, "bullet_speed": 10, "damage": 1, "color": "#8be9fd"},
+    3: {"name": "Tank", "hp": 8, "speed": 5, "bullet_speed": 6, "damage": 2, "color": "#ff5555"}
 }
 
 VIRUS_CONFIG = {
@@ -33,7 +32,7 @@ sio_app = socketio.ASGIApp(sio, app)
 MAP_WIDTH = 600
 MAP_HEIGHT = 500
 MAX_ENEMIES = 5
-INVINCIBLE_TIME = 0.5
+INVINCIBLE_TIME = 0.5  # 無敵幀時間 (秒)
 
 # --- 全域狀態 ---
 game_vars = {
@@ -51,6 +50,7 @@ game_state = {
     "warning_active": False
 }
 
+
 # --- Helper: 穩定 FPS 的計時器 ---
 class LoopTimer:
     def __init__(self, fps):
@@ -66,6 +66,7 @@ class LoopTimer:
         else:
             self.next_tick = now + self.frame_duration
 
+
 # --- 數據壓縮 ---
 def compress_state(state):
     compressed = {
@@ -76,6 +77,7 @@ def compress_state(state):
             "x": int(p["x"]), "y": int(p["y"]), "skin": p["skin"], "name": p["name"],
             "hp": max(0, int(p["hp"])), "max_hp": int(p["max_hp"]), "score": int(p["score"]),
             "charge": p["charge"], "hit_accumulated": p["hit_accumulated"], "c": p["stats"]["color"],
+            # 傳送無敵狀態給前端 (可選：讓前端閃爍)
             "invincible": (time.time() - p.get("last_hit_time", 0) < INVINCIBLE_TIME)
         }
     for eid, e in state["enemies"].items():
@@ -84,21 +86,30 @@ def compress_state(state):
             "size": e["size"], "hp": max(0, int(e["hp"])), "max_hp": int(e["max_hp"])
         }
     for b in state["bullets"]:
-        # 這裡只回傳必要的子彈資訊
         compressed["bullets"].append({"x": int(b["x"]), "y": int(b["y"]), "owner": b["owner"]})
     for s in state["skill_objects"]:
         compressed["skill_objects"].append({"x": int(s["x"]), "y": int(s["y"]), "skin": s["skin"]})
     return compressed
 
-# --- 碰撞檢測 ---
+
+# --- 優化 3: 圓形碰撞檢測 (取代舊的矩形判定) ---
 def check_collision(obj1, obj2, r1_override=None, r2_override=None):
+    # 如果有傳入覆寫半徑就用傳入的，否則嘗試從物件取 size
     r1 = r1_override if r1_override is not None else obj1.get('size', 20) / 2
     r2 = r2_override if r2_override is not None else obj2.get('size', 20) / 2
-    cx1, cy1 = obj1['x'] + r1, obj1['y'] + r1
-    cx2, cy2 = obj2['x'] + r2, obj2['y'] + r2
+
+    # 取得中心點 (假設 x,y 是左上角)
+    cx1 = obj1['x'] + r1
+    cy1 = obj1['y'] + r1
+    cx2 = obj2['x'] + r2
+    cy2 = obj2['y'] + r2
+
     dist_sq = (cx1 - cx2) ** 2 + (cy1 - cy2) ** 2
     radius_sum_sq = (r1 + r2) ** 2
+
+    # 判定距離是否小於半徑和 (0.8係數是為了讓手感更好，不要輕輕擦到就死)
     return dist_sq < (radius_sum_sq * 0.8)
+
 
 def spawn_boss():
     eid = "THE_BOSS"
@@ -110,17 +121,15 @@ def spawn_boss():
     game_vars["boss_phase"] = "boss_active"
     game_state["warning_active"] = False
 
+
 # --- 主遊戲迴圈 ---
 async def game_loop():
     boss_shoot_toggle = 0
-    timer = LoopTimer(fps=30) # 30 TPS 對於這類遊戲已足夠，能大幅降低頻寬
+    timer = LoopTimer(fps=30)
 
     while True:
         curr = time.time()
-        
-        # [修改] 將 sfx_buffer 分為「廣播」和「單播」
-        global_sfx_buffer = []  # 給所有人聽 (Boss出場、警告)
-        unicast_sfx_tasks = []  # 只給特定人聽 (擊中回饋)
+        sfx_buffer = []
 
         def handle_enemy_death_logic(enemy):
             if enemy['type'] == 3:
@@ -133,7 +142,7 @@ async def game_loop():
                         game_vars["boss_phase"] = "warning"
                         game_vars["phase_start_time"] = time.time()
                         game_state["warning_active"] = True
-                        global_sfx_buffer.append({'type': 'boss_coming'})
+                        sfx_buffer.append({'type': 'boss_coming'})
 
             if enemy['type'] == 999:
                 game_vars["boss_phase"] = "collecting"
@@ -146,20 +155,23 @@ async def game_loop():
                 game_vars["boss_phase"] = "warning"
                 game_vars["phase_start_time"] = curr
                 game_state["warning_active"] = True
-                global_sfx_buffer.append({'type': 'boss_coming'})
+                sfx_buffer.append({'type': 'boss_coming'})
 
         elif game_vars["boss_phase"] == "warning":
             if curr - game_vars["phase_start_time"] > 5:
                 spawn_boss()
-                global_sfx_buffer.append({'type': 'boss_coming'})
+                sfx_buffer.append({'type': 'boss_coming'})
 
         # --- 敵人生成 ---
         if len(game_state["enemies"]) < MAX_ENEMIES and game_vars["boss_phase"] != "boss_active":
             eid = str(uuid.uuid4())
             rand_val = random.random()
-            if rand_val < VIRUS_CONFIG[3]["prob"]: v_type = 3
-            elif rand_val < VIRUS_CONFIG[3]["prob"] + VIRUS_CONFIG[2]["prob"]: v_type = 2
-            else: v_type = 1
+            if rand_val < VIRUS_CONFIG[3]["prob"]:
+                v_type = 3
+            elif rand_val < VIRUS_CONFIG[3]["prob"] + VIRUS_CONFIG[2]["prob"]:
+                v_type = 2
+            else:
+                v_type = 1
             stats = VIRUS_CONFIG[v_type]
             game_state["enemies"][eid] = {
                 "x": random.randint(0, MAP_WIDTH - stats["size"]),
@@ -180,12 +192,12 @@ async def game_loop():
                 obj["y"] = owner["y"] + math.sin(angle) * 50
 
                 for eid, enemy in list(game_state["enemies"].items()):
+                    # 使用新的 check_collision
                     if check_collision(obj, enemy):
                         enemy["hp"] -= obj["damage"]
                         obj["durability"] -= 1
-                        
-                        # 技能擊中音效可以考慮廣播，因為很帥且不頻繁
-                        global_sfx_buffer.append({'type': 'boss_hitted' if enemy["type"] == 999 else 'enemy_hitted'})
+
+                        sfx_buffer.append({'type': 'boss_hitted' if enemy["type"] == 999 else 'enemy_hitted'})
 
                         if enemy["hp"] <= 0:
                             handle_enemy_death_logic(enemy)
@@ -214,17 +226,18 @@ async def game_loop():
             # 玩家打怪
             if b['owner'] not in ['enemy', 'boss']:
                 for eid, enemy in list(game_state["enemies"].items()):
+                    # 子彈很小，r1_override 給 5
                     if check_collision(b, enemy, r1_override=5):
                         enemy['hp'] -= b.get('damage', 1)
                         hit = True
 
-                        # [重點優化] 擊中音效改為 Unicast (只傳給擁有者)
-                        # 這樣不會讓所有人都收到 "Hit" 封包，大幅降低延遲
-                        if b['owner'] in game_state["players"]:
-                            sfx_type = 'boss_hitted' if enemy['type'] == 999 else 'enemy_hitted'
-                            # 建立一個非同步發送任務
-                            unicast_sfx_tasks.append(sio.emit('sfx', {'type': sfx_type}, to=b['owner']))
+                        # 優化 2: 擊中音效是否要廣播？如果要「只有自己聽到」，這裡可以不加 sfx
+                        # 但為了遊戲性，通常「擊中」回饋還是會廣播，若堅持只有自己聽到，可移除這行：
+                        # sfx_buffer.append({'type': 'boss_hitted' if enemy['type'] == 999 else 'enemy_hitted'})
+                        # 這裡我保留擊中音效，因為這屬於重要資訊，但移除了「射擊」音效
+                        sfx_buffer.append({'type': 'boss_hitted' if enemy['type'] == 999 else 'enemy_hitted'})
 
+                        if b['owner'] in game_state["players"]:
                             p = game_state["players"][b['owner']]
                             p["hit_accumulated"] += 1
                             if p["hit_accumulated"] >= 20:
@@ -241,14 +254,16 @@ async def game_loop():
             # 怪物打玩家
             else:
                 for pid, player in list(game_state["players"].items()):
+                    # --- 優化 4: 無敵幀判斷 ---
                     if (curr - player.get('last_hit_time', 0)) < INVINCIBLE_TIME:
-                        continue 
+                        continue  # 還在無敵時間內，跳過碰撞檢測
 
                     if check_collision(b, player, r1_override=b.get('size', 5) / 2, r2_override=15):
                         player['hp'] -= b.get('damage', 1)
-                        player['last_hit_time'] = curr
-                        # 受傷音效還是需要讓該玩家知道
-                        unicast_sfx_tasks.append(sio.emit('sfx', {'type': 'character_hitted'}, to=pid))
+                        player['last_hit_time'] = curr  # 更新受傷時間
+
+                        # 這裡發送受傷音效，因為是被打
+                        sfx_buffer.append({'type': 'character_hitted'})
                         hit = True
                         if player['hp'] <= 0:
                             player['x'], player['y'] = random.randint(100, 500), 400
@@ -263,7 +278,7 @@ async def game_loop():
 
         # --- AI 移動與攻擊 ---
         for eid, enemy in list(game_state["enemies"].items()):
-            # Boss
+            # Boss Logic
             if enemy['type'] == 999:
                 enemy['move_timer'] += 1
                 if enemy['move_timer'] > 60:
@@ -273,13 +288,16 @@ async def game_loop():
                 enemy['x'] = max(0, min(MAP_WIDTH - enemy['size'], enemy['x'] + enemy.get('dx', 0)))
                 enemy['y'] = max(0, min(MAP_HEIGHT - enemy['size'], enemy['y'] + enemy.get('dy', 0)))
 
+                # Boss 撞人 (使用圓形碰撞 + 無敵幀)
                 for pid, player in game_state["players"].items():
-                    if (curr - player.get('last_hit_time', 0)) < INVINCIBLE_TIME: continue
-                    if check_collision(player, enemy, r1_override=15):
-                        if random.random() < 0.2:
+                    if (curr - player.get('last_hit_time', 0)) < INVINCIBLE_TIME:
+                        continue  # 無敵中
+
+                    if check_collision(player, enemy, r1_override=15):  # 玩家半徑約15
+                        if random.random() < 0.2:  # 稍微提高撞擊觸發率，但依賴無敵幀保護
                             player['hp'] -= 1
-                            player['last_hit_time'] = curr
-                            unicast_sfx_tasks.append(sio.emit('sfx', {'type': 'character_hitted'}, to=pid))
+                            player['last_hit_time'] = curr  # 更新受傷時間
+                            sfx_buffer.append({'type': 'character_hitted'})
                             if player['hp'] <= 0:
                                 player['x'], player['y'] = random.randint(100, 500), 400
                                 player['hp'] = player['max_hp']
@@ -287,20 +305,22 @@ async def game_loop():
                                 player['charge'] = 0
                                 player['hit_accumulated'] = 0
 
+                # Boss 開火
                 is_enraged = (enemy['hp'] < enemy['max_hp'] * 0.5)
                 fire_rate = 0.05 if is_enraged else 0.03
                 if random.random() < fire_rate:
                     cx, cy = enemy['x'] + enemy['size'] / 2, enemy['y'] + enemy['size'] / 2
                     configs = [(0, 10), (0, -10), (10, 0), (-10, 0)] if is_enraged else (
-                        [(0, 10), (0, -10)] if (boss_shoot_toggle := boss_shoot_toggle + 1) % 2 == 0 else [(10, 0), (-10, 0)])
+                        [(0, 10), (0, -10)] if (boss_shoot_toggle := boss_shoot_toggle + 1) % 2 == 0 else [(10, 0),
+                                                                                                           (-10, 0)])
                     for dx, dy in configs:
                         game_state["bullets"].append({
                             "x": cx, "y": cy, "dx": dx, "dy": dy,
                             "owner": "boss", "damage": 1, "size": 10
                         })
-                    global_sfx_buffer.append({'type': 'boss_shot'})
+                    sfx_buffer.append({'type': 'boss_shot'})
 
-            # Normal Enemy
+            # Normal Enemy Logic
             else:
                 enemy['y'] += enemy['speed'] * 0.5
                 enemy['move_timer'] += 1
@@ -310,13 +330,16 @@ async def game_loop():
                 enemy['x'] = max(0, min(MAP_WIDTH - enemy['size'], enemy['x']))
                 if enemy['y'] > MAP_HEIGHT: enemy['y'] = -50
 
+                # 小怪撞人 (圓形碰撞 + 無敵幀)
                 for pid, player in game_state["players"].items():
-                    if (curr - player.get('last_hit_time', 0)) < INVINCIBLE_TIME: continue
+                    if (curr - player.get('last_hit_time', 0)) < INVINCIBLE_TIME:
+                        continue
+
                     if check_collision(player, enemy, r1_override=15):
                         if random.random() < 0.2:
                             player['hp'] -= 1
                             player['last_hit_time'] = curr
-                            unicast_sfx_tasks.append(sio.emit('sfx', {'type': 'character_hitted'}, to=pid))
+                            sfx_buffer.append({'type': 'character_hitted'})
                             if player['hp'] <= 0:
                                 player['x'], player['y'] = random.randint(100, 500), 400
                                 player['hp'] = player['max_hp']
@@ -324,6 +347,7 @@ async def game_loop():
                                 player['charge'] = 0
                                 player['hit_accumulated'] = 0
 
+                # 小怪開火
                 atk_stats = VIRUS_CONFIG[enemy['type']]['attack']
                 if random.random() < atk_stats['fire_rate']:
                     center_x = enemy['x'] + enemy['size'] / 2
@@ -341,27 +365,22 @@ async def game_loop():
                             "owner": "enemy", "damage": atk_stats['damage'],
                             "size": 6 if atk_stats['damage'] > 1 else 5
                         })
-                    # 敵人射擊頻率很高，如果會卡頓，可以註解掉下面這行
-                    # global_sfx_buffer.append({'type': 'enemy_nor_shot'}) 
 
-        # --- 廣播與發送 ---
         emit_tasks = [sio.emit('state_update', compress_state(game_state))]
-        
-        # 處理廣播 SFX
-        if global_sfx_buffer:
-            unique_sfx = list({v['type']: v for v in global_sfx_buffer}.values())
+
+        if sfx_buffer:
+            unique_sfx = list({v['type']: v for v in sfx_buffer}.values())
             for sfx in unique_sfx:
                 emit_tasks.append(sio.emit('sfx', sfx))
-        
-        # 合併 Unicast SFX 任務
-        emit_tasks.extend(unicast_sfx_tasks)
 
         await asyncio.gather(*emit_tasks)
         await timer.tick()
 
+
 # --- 事件處理 ---
 @app.on_event("startup")
 async def startup_event(): asyncio.create_task(game_loop())
+
 
 @sio.event
 async def join_game(sid, data):
@@ -369,17 +388,16 @@ async def join_game(sid, data):
     skin_type = random.randint(1, 3)
     game_state["players"][sid] = {
         "x": random.randint(100, 500), "y": 400, "name": name, "skin": skin_type,
-        "stats": CELL_CONFIG[skin_type], 
-        "hp": CELL_CONFIG[skin_type]["hp"], 
-        "max_hp": CELL_CONFIG[skin_type]["hp"],
+        "stats": CELL_CONFIG[skin_type], "hp": CELL_CONFIG[skin_type]["hp"], "max_hp": CELL_CONFIG[skin_type]["hp"],
         "score": 0, "charge": 0, "hit_accumulated": 0, "last_skill_time": 0,
-        "last_hit_time": 0,
-        "last_shot_time": 0 # [新增] 初始化射擊時間
+        "last_hit_time": 0  # 初始化無敵時間
     }
+
 
 @sio.event
 async def disconnect(sid):
     if sid in game_state["players"]: del game_state["players"][sid]
+
 
 @sio.event
 async def move(sid, data):
@@ -388,25 +406,17 @@ async def move(sid, data):
         p['x'] = max(0, min(MAP_WIDTH - 30, p['x'] + data.get('dx', 0) * p['stats']['speed']))
         p['y'] = max(0, min(MAP_HEIGHT - 30, p['y'] + data.get('dy', 0) * p['stats']['speed']))
 
+
 @sio.event
 async def shoot(sid):
     if sid in game_state["players"]:
         p = game_state["players"][sid]
-        curr = time.time()
-        
-        # [重點優化] Server 端射速限制
-        # 如果請求間隔小於 cooldown (設定檔內的秒數)，直接無視請求
-        if curr - p.get("last_shot_time", 0) < p["stats"]["cooldown"]:
-            return
-
-        p["last_shot_time"] = curr
-        
-        # 生成子彈
         game_state["bullets"].append({
             "x": p['x'] + 15, "y": p['y'], "dx": 0, "dy": -p['stats']['bullet_speed'],
             "owner": sid, "damage": p['stats']['damage'], "size": 5
         })
-        # 注意：我們已經移除 emit 'character_nor_shot'，解決回音問題
+        # 注意：這裡不再 emit 'character_nor_shot'，讓前端自己處理聲音
+
 
 @sio.event
 async def use_skill(sid):
@@ -420,8 +430,8 @@ async def use_skill(sid):
                 "owner_id": sid, "x": p["x"], "y": p["y"], "size": 30, "damage": 1,
                 "durability": 10, "duration": 10, "start_time": curr, "angle_offset": 0, "skin": p["skin"]
             })
-            # 技能音效比較少見，可以廣播
             await sio.emit('sfx', {'type': 'skill_slime'})
+
 
 if __name__ == "__main__":
     uvicorn.run(socketio.ASGIApp(sio, app), host="0.0.0.0", port=8000)
