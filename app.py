@@ -1,9 +1,9 @@
+# v3.6.1 app.py (Optimized Frontend)
 import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Cell Wars V5", layout="wide")
 
-# 請確認此 URL 對應到你正確的 Server
 SERVER_URL = "https://cell-wars.onrender.com"
 GITHUB_USER = "Kuaan"
 GITHUB_REPO = "Cell_Wars"
@@ -34,7 +34,7 @@ html_code = f"""
             height: 100vh; width: 100vw;
         }}
 
-        /* 登入介面 */
+        /* 登入介面置頂 */
         #login-overlay {{
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: #0d0211; z-index: 99999; 
@@ -99,7 +99,7 @@ html_code = f"""
     <div id="login-overlay">
         <div id="login-box">
             <h1 style="color: #50fa7b; margin: 0 0 10px 0;">🦠 CELL WARS</h1>
-            <p style="color: #aaa; font-size: 12px;">v3.7.3 Client: 預測同步版</p>
+            <p style="color: #aaa; font-size: 12px;">擊敗菁英怪以觸發魔王出現</p>
             <input type="text" id="name-input" placeholder="輸入名稱" maxlength="8">
             <button id="start-btn">進入遊戲</button>
         </div>
@@ -135,7 +135,6 @@ html_code = f"""
         const assetsBase = "{ASSETS_BASE}";
         const soundsBase = "{SOUNDS_BASE}";
 
-        // --- 音效系統 ---
         const audioFiles = {{
             bgm: new Audio(soundsBase + "bgm/bgm-145a.wav"),
             p_hit: new Audio(soundsBase + "characters/character_hitted.wav"),
@@ -151,6 +150,7 @@ html_code = f"""
         let volBGM = 0.4;
         let volSFX = 0.6;
 
+        // 優化 1: 音量控制邏輯修復
         function updateBGM() {{
             audioFiles.bgm.volume = volBGM;
             if(volBGM <= 0.01) audioFiles.bgm.pause();
@@ -159,13 +159,23 @@ html_code = f"""
             }}
         }}
 
+        // 初始化音量
         updateBGM();
-        for (let k in audioFiles) {{ if(k !== 'bgm') audioFiles[k].volume = volSFX; }}
+        for (let k in audioFiles) {{
+            if(k !== 'bgm') audioFiles[k].volume = volSFX;
+        }}
 
-        document.getElementById('vol-bgm').oninput = function() {{ volBGM = parseFloat(this.value); updateBGM(); }};
-        document.getElementById('vol-sfx').oninput = function() {{ 
-            volSFX = parseFloat(this.value); 
-            for (let k in audioFiles) {{ if(k !== 'bgm') audioFiles[k].volume = volSFX; }}
+        // 監聽 Slider 變化 (直接取值，不除以100)
+        document.getElementById('vol-bgm').oninput = function() {{
+            volBGM = parseFloat(this.value);
+            updateBGM();
+        }};
+
+        document.getElementById('vol-sfx').oninput = function() {{
+            volSFX = parseFloat(this.value);
+            for (let k in audioFiles) {{
+                if(k !== 'bgm') audioFiles[k].volume = volSFX;
+            }}
         }};
 
         function playSfx(key) {{
@@ -177,26 +187,22 @@ html_code = f"""
             }}
         }}
 
-        // --- 資源加載 ---
         const skins = {{ cells: [], viruses: [], boss: null }};
-        function loadImg(path) {{ let img = new Image(); img.src = path; return img; }}
+        function loadImg(path) {{
+            let img = new Image(); img.src = path;
+            return img;
+        }}
         for(let i=1; i<=3; i++) {{
             skins.cells.push(loadImg(assetsBase + "cell_" + i + ".png"));
             skins.viruses.push(loadImg(assetsBase + "virus_" + i + ".png"));
         }}
         skins.boss = loadImg(assetsBase + "boss_1.png");
 
-        // --- 遊戲變數 ---
         let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], skill_objects: [], w: false }};
         let myId = null;
-        
-        // [新增] 本地預測相關變數
-        let localBullets = []; 
-        let lastShotTime = 0;
 
         socket.on('connect', () => {{ myId = socket.id; }});
 
-        // --- 音效過濾 (對應 Server v3.7.3) ---
         socket.on('sfx', (data) => {{
             switch(data.type) {{
                 case 'character_hitted': playSfx('p_hit'); break;
@@ -206,33 +212,15 @@ html_code = f"""
                 case 'enemy_hitted': playSfx('e_hit'); break;
                 case 'enemy_nor_shot': playSfx('e_shot'); break;
                 case 'skill_slime': playSfx('skill'); break;
-                // 不再監聽 character_nor_shot，完全由本地 doFire 控制
+                // 注意：這裡不再監聽自己的 shot，改由本地觸發
             }}
         }});
 
         socket.on('state_update', (data) => {{
             gameState = data;
+            requestAnimationFrame(draw);
             updateUI();
         }});
-
-        // --- 遊戲迴圈 (FPS 60) ---
-        function loop() {{
-            updateLocalBullets();
-            draw();
-            requestAnimationFrame(loop);
-        }}
-        requestAnimationFrame(loop);
-
-        function updateLocalBullets() {{
-            // 讓本地子彈飛
-            for(let i = localBullets.length - 1; i >= 0; i--) {{
-                localBullets[i].y -= localBullets[i].speed; 
-                // 飛出邊界或太久則移除
-                if(localBullets[i].y < -50) {{
-                    localBullets.splice(i, 1);
-                }}
-            }}
-        }}
 
         function updateUI() {{
             if (!myId || !gameState.players[myId]) return;
@@ -253,8 +241,7 @@ html_code = f"""
 
         function draw() {{
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // 1. 繪製技能
+            // 技能
             ctx.globalAlpha = 0.6;
             (gameState.skill_objects || []).forEach(obj => {{
                 let img = skins.cells[(obj.skin || 1) - 1];
@@ -262,7 +249,7 @@ html_code = f"""
             }});
             ctx.globalAlpha = 1.0;
 
-            // 2. 繪製敵人
+            // 敵人
             for (let id in gameState.enemies) {{
                 let e = gameState.enemies[id];
                 if (e.type === 999) {{
@@ -277,42 +264,33 @@ html_code = f"""
                 }}
             }}
 
-            // 3. 繪製玩家
+            // 玩家
             for (let id in gameState.players) {{
                 let p = gameState.players[id];
+                // 優化 4: 無敵幀視覺效果 (閃爍或半透明)
                 if (p.invincible) ctx.globalAlpha = 0.5;
+
                 let img = skins.cells[(p.skin || 1) - 1];
                 if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
-                ctx.globalAlpha = 1.0;
-                
+
+                ctx.globalAlpha = 1.0; // 重置透明度
+
                 ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
                 ctx.fillText(p.name, p.x+15, p.y-15);
                 const hpRatio = Math.max(0, p.hp / p.max_hp);
                 ctx.fillStyle = "#50fa7b"; ctx.fillRect(p.x, p.y-10, 30 * hpRatio, 4);
             }}
 
-            // 4. 繪製 Server 子彈 (但過濾掉「自己」的，避免重影)
+            // 子彈
             gameState.bullets.forEach(b => {{
-                // 關鍵：如果這顆子彈是我射的，我不畫它（因為我有畫本地預測的了）
-                // 除非網路極差，否則這樣視覺最滑順
-                if (b.owner === myId) return;
-
                 ctx.beginPath();
                 if (b.owner === 'boss') {{ ctx.fillStyle = '#bd93f9'; ctx.arc(b.x, b.y, 8, 0, Math.PI*2); }}
                 else if (b.owner === 'enemy') {{ ctx.fillStyle = '#ff5555'; ctx.arc(b.x, b.y, 3, 0, Math.PI*2); }}
-                else {{ ctx.fillStyle = '#8be9fd'; ctx.arc(b.x, b.y, 4, 0, Math.PI*2); }}
+                else {{ ctx.fillStyle = (b.owner === myId) ? '#f1fa8c' : '#8be9fd'; ctx.arc(b.x, b.y, 4, 0, Math.PI*2); }}
                 ctx.fill();
             }});
 
-            // 5. 繪製本地預測子彈 (自己的)
-            ctx.fillStyle = '#ffffcc'; // 亮黃色
-            localBullets.forEach(b => {{
-                ctx.beginPath();
-                ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
-                ctx.fill();
-            }});
-
-            // 6. 警告特效
+            // 警告特效
             if (gameState.w) {{
                 const time = Date.now();
                 ctx.save();
@@ -351,49 +329,22 @@ html_code = f"""
         manager.on('move', (evt, data) => {{ if(data.vector) socket.emit('move', {{ dx: data.vector.x, dy: -data.vector.y }}); }});
         manager.on('end', () => {{ socket.emit('move', {{ dx: 0, dy: 0 }}); }});
 
-        // --- 核心：開火邏輯優化 (預測 + 冷卻檢查) ---
+        // 動作處理
         function doFire() {{
-            if (!myId || !gameState.players[myId]) return;
-            const p = gameState.players[myId];
-            const now = Date.now();
-
-            // 1. 本地檢查冷卻 (必須與 Server 設定一致)
-            let cooldown = 250; // Soldier (Skin 1)
-            if (p.skin === 2) cooldown = 150; // Scout
-            if (p.skin === 3) cooldown = 400; // Tank
-
-            // 如果冷卻還沒好，直接無視這次點擊 (不發聲、不射擊)
-            if (now - lastShotTime < cooldown) return;
-
-            // 2. 更新時間並執行
-            lastShotTime = now;
-            playSfx('p_shot'); // 立即播放聲音
-            socket.emit('shoot'); // 通知 Server 計算傷害
-
-            // 3. 立即生成視覺子彈 (速度需約略等於 Server 設定)
-            let bulletSpeed = 7;
-            if (p.skin === 2) bulletSpeed = 10;
-            if (p.skin === 3) bulletSpeed = 6;
-
-            localBullets.push({{
-                x: p.x + 15, // 稍微置中偏移
-                y: p.y,
-                speed: bulletSpeed
-            }});
+            socket.emit('shoot');
+            // 優化 2: 這裡直接播放聲音，不依賴伺服器回傳
+            playSfx('p_shot');
         }}
 
         function doSkill() {{
             socket.emit('use_skill');
         }}
 
-        // 輸入綁定
-        const fireBtn = document.getElementById('fire-btn');
-        fireBtn.addEventListener('touchstart', (e) => {{ e.preventDefault(); doFire(); }});
-        fireBtn.addEventListener('mousedown', (e) => {{ e.preventDefault(); doFire(); }});
+        document.getElementById('fire-btn').addEventListener('touchstart', (e) => {{ e.preventDefault(); doFire(); }});
+        document.getElementById('fire-btn').addEventListener('mousedown', (e) => {{ e.preventDefault(); doFire(); }});
 
-        const skillBtn = document.getElementById('skill-btn');
-        skillBtn.addEventListener('touchstart', (e) => {{ e.preventDefault(); doSkill(); }});
-        skillBtn.addEventListener('mousedown', (e) => {{ e.preventDefault(); doSkill(); }});
+        document.getElementById('skill-btn').addEventListener('touchstart', (e) => {{ e.preventDefault(); doSkill(); }});
+        document.getElementById('skill-btn').addEventListener('mousedown', (e) => {{ e.preventDefault(); doSkill(); }});
 
         document.addEventListener('keydown', (e) => {{
             if (e.code === 'Space') doFire();
