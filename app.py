@@ -1,10 +1,11 @@
-# v3.6.1 app.py (Optimized Frontend)
+# v3.7.3 app.py (Frontend with Audio Polyphony & Local Prediction)
 import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Cell Wars V5", layout="wide")
 
-SERVER_URL = "https://cell-wars.onrender.com"
+# --- 設定參數 ---
+SERVER_URL = "https://cell-wars.onrender.com"  # 請確認這是您 Render 的正確網址
 GITHUB_USER = "Kuaan"
 GITHUB_REPO = "Cell_Wars"
 ASSETS_BASE = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/assets/"
@@ -135,6 +136,7 @@ html_code = f"""
         const assetsBase = "{ASSETS_BASE}";
         const soundsBase = "{SOUNDS_BASE}";
 
+        // --- 音效系統 ---
         const audioFiles = {{
             bgm: new Audio(soundsBase + "bgm/bgm-145a.wav"),
             p_hit: new Audio(soundsBase + "characters/character_hitted.wav"),
@@ -146,47 +148,51 @@ html_code = f"""
             e_shot: new Audio(soundsBase + "enemy/enemy_nor_shot.wav"),
             skill: new Audio(soundsBase + "skill/slime.wav")
         }};
+        
         audioFiles.bgm.loop = true;
         let volBGM = 0.4;
         let volSFX = 0.6;
+        let lastShotTime = 0; // [本地] 射擊冷卻控制
 
-        // 優化 1: 音量控制邏輯修復
+        // --- 優化 1: 聲音 Polyphony (多重音效) ---
+        // 解決 iPhone 播放聲音時的卡頓與吞音問題
+        function playSfx(key) {{
+            if (volSFX <= 0.01) return;
+            const src = audioFiles[key];
+            if (src) {{
+                // 使用 cloneNode(true) 創建音效分身，允許聲音疊加
+                const clone = src.cloneNode(true);
+                clone.volume = volSFX; // [重要] 在播放前套用當前音量
+                clone.play().catch(e => {{ console.log("Audio play error:", e); }});
+            }}
+        }}
+
+        // --- BGM 控制 ---
         function updateBGM() {{
             audioFiles.bgm.volume = volBGM;
-            if(volBGM <= 0.01) audioFiles.bgm.pause();
-            else if(audioFiles.bgm.paused && document.getElementById('login-overlay').style.display === 'none') {{
+            if(volBGM <= 0.01) {{
+                audioFiles.bgm.pause();
+            }} else if(audioFiles.bgm.paused && document.getElementById('login-overlay').style.display === 'none') {{
                 audioFiles.bgm.play().catch(e=>{{}});
             }}
         }}
 
         // 初始化音量
         updateBGM();
-        for (let k in audioFiles) {{
-            if(k !== 'bgm') audioFiles[k].volume = volSFX;
-        }}
 
-        // 監聽 Slider 變化 (直接取值，不除以100)
+        // 監聽 BGM Slider
         document.getElementById('vol-bgm').oninput = function() {{
             volBGM = parseFloat(this.value);
-            updateBGM();
+            updateBGM(); // 即時應用
         }};
 
+        // 監聽 SFX Slider
         document.getElementById('vol-sfx').oninput = function() {{
             volSFX = parseFloat(this.value);
-            for (let k in audioFiles) {{
-                if(k !== 'bgm') audioFiles[k].volume = volSFX;
-            }}
+            // 不需要遍歷 audioFiles，因為 playSfx 每次都會讀取最新的 volSFX
         }};
 
-        function playSfx(key) {{
-            if (volSFX <= 0.01) return;
-            const s = audioFiles[key];
-            if(s) {{ 
-                s.currentTime = 0; 
-                s.play().catch(e => {{}}); 
-            }}
-        }}
-
+        // --- 圖片載入 ---
         const skins = {{ cells: [], viruses: [], boss: null }};
         function loadImg(path) {{
             let img = new Image(); img.src = path;
@@ -204,6 +210,8 @@ html_code = f"""
         socket.on('connect', () => {{ myId = socket.id; }});
 
         socket.on('sfx', (data) => {{
+            // 這裡只處理「別人」或「系統」觸發的聲音
+            // 自己的射擊聲音在 doFire() 本地處理
             switch(data.type) {{
                 case 'character_hitted': playSfx('p_hit'); break;
                 case 'boss_coming': playSfx('boss_come'); break;
@@ -212,7 +220,6 @@ html_code = f"""
                 case 'enemy_hitted': playSfx('e_hit'); break;
                 case 'enemy_nor_shot': playSfx('e_shot'); break;
                 case 'skill_slime': playSfx('skill'); break;
-                // 注意：這裡不再監聽自己的 shot，改由本地觸發
             }}
         }});
 
@@ -241,6 +248,7 @@ html_code = f"""
 
         function draw() {{
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
             // 技能
             ctx.globalAlpha = 0.6;
             (gameState.skill_objects || []).forEach(obj => {{
@@ -267,13 +275,14 @@ html_code = f"""
             // 玩家
             for (let id in gameState.players) {{
                 let p = gameState.players[id];
-                // 優化 4: 無敵幀視覺效果 (閃爍或半透明)
+                
+                // 無敵幀視覺效果
                 if (p.invincible) ctx.globalAlpha = 0.5;
 
                 let img = skins.cells[(p.skin || 1) - 1];
                 if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
 
-                ctx.globalAlpha = 1.0; // 重置透明度
+                ctx.globalAlpha = 1.0; // 重置
 
                 ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
                 ctx.fillText(p.name, p.x+15, p.y-15);
@@ -290,7 +299,7 @@ html_code = f"""
                 ctx.fill();
             }});
 
-            // 警告特效
+            // 警告特效 (BOSS)
             if (gameState.w) {{
                 const time = Date.now();
                 ctx.save();
@@ -329,10 +338,16 @@ html_code = f"""
         manager.on('move', (evt, data) => {{ if(data.vector) socket.emit('move', {{ dx: data.vector.x, dy: -data.vector.y }}); }});
         manager.on('end', () => {{ socket.emit('move', {{ dx: 0, dy: 0 }}); }});
 
-        // 動作處理
+        // --- 動作處理 (本地預測 + 頻率限制) ---
         function doFire() {{
+            const now = Date.now();
+            // [本地] 150ms 冷卻，配合 Server 端設定，避免視覺與邏輯不同步
+            if (now - lastShotTime < 150) return;
+            
+            lastShotTime = now;
+            
             socket.emit('shoot');
-            // 優化 2: 這裡直接播放聲音，不依賴伺服器回傳
+            // [本地] 直接播放聲音，不等待 Server
             playSfx('p_shot');
         }}
 
