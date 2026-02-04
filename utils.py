@@ -1,6 +1,15 @@
 import math
 import time
 
+def get_distance(obj1, obj2):
+    """計算兩個物件中心點的距離"""
+    x1, y1 = (obj1.x, obj1.y) if hasattr(obj1, 'x') else (obj1['x'], obj1['y'])
+    x2, y2 = (obj2.x, obj2.y) if hasattr(obj2, 'x') else (obj2['x'], obj2['y'])
+    # 這裡假設 size 的一半是半徑
+    r1 = obj1.size / 2 if hasattr(obj1, 'size') else 10
+    r2 = obj2.size / 2 if hasattr(obj2, 'size') else 10
+    return math.sqrt((x1 + r1 - (x2 + r2))**2 + (y1 + r1 - (y2 + r2))**2)
+
 def check_collision(obj1, obj2, r1_override=None, r2_override=None):
     """基本圓形碰撞 (Player/Enemy/Item)"""
     x1, y1 = (obj1.x, obj1.y) if hasattr(obj1, 'x') else (obj1['x'], obj1['y'])
@@ -13,11 +22,9 @@ def check_collision(obj1, obj2, r1_override=None, r2_override=None):
 
 def check_circle_rect_collision(circle, rect):
     """圓形與矩形碰撞 (用於牆壁阻擋)"""
-    # 找到矩形上最接近圓心的點
     closest_x = max(rect.x, min(circle.x + circle.size/2, rect.x + rect.width))
     closest_y = max(rect.y, min(circle.y + circle.size/2, rect.y + rect.height))
     
-    # 計算該點與圓心的距離
     dist_x = (circle.x + circle.size/2) - closest_x
     dist_y = (circle.y + circle.size/2) - closest_y
     
@@ -36,7 +43,7 @@ def compress_state(state):
             "hp": max(0, int(p.hp)), "max_hp": int(p.max_hp), "score": int(p.score),
             "charge": p.charge, "c": p.color, "invincible": p.is_invincible(),
             "w_icon": p.weapon_icon,
-            "wall_cd": max(0, int(p.get_wall_cd())) # 傳送牆壁冷卻秒數
+            "wall_cd": max(0, int(p.get_wall_cd()))
         }
     
     for eid, e in state["enemies"].items():
