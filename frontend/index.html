@@ -1,1 +1,56 @@
- 
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    <style>
+        {style} 
+    </style>
+</head>
+<body>
+    <div id="login-overlay">
+        <div id="login-box">
+            <h1 class="title">🦠 CELL WARS V5.1</h1>
+            <p class="subtitle">Refactored Client</p>
+            <input type="text" id="name-input" placeholder="輸入名稱" maxlength="8">
+            <button id="start-btn" disabled>資源載入中...</button>
+        </div>
+    </div>
+
+    <div id="top-bar">
+        <div class="vol-control">BGM <input type="range" id="vol-bgm" min="0" max="1" step="0.1" value="{vol_bgm}"></div>
+        <div id="lb-content">...</div>
+        <div class="vol-control">SFX <input type="range" id="vol-sfx" min="0" max="1" step="0.1" value="{vol_sfx}"></div>
+    </div>
+
+    <canvas id="gameCanvas" width="600" height="500"></canvas>
+
+    <div id="ui-container">
+        <div id="joystick-zone"></div>
+        <div id="actions-zone">
+            <div id="charge-container">
+                <div class="charge-bar-segment" id="seg1"><div class="charge-fill" id="fill1"></div></div>
+                <div class="charge-bar-segment" id="seg2"><div class="charge-fill" id="fill2"></div></div>
+                <div class="charge-bar-segment" id="seg3"><div class="charge-fill" id="fill3"></div></div>
+            </div>
+            <div style="display:flex; gap:15px; align-items:flex-end;">
+                <div class="btn-skill disabled" id="skill-btn">SKILL</div>
+                <div class="btn-fire" id="fire-btn">🔥</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化變數
+        const SERVER_URL = "{server_url}";
+        const ASSETS_BASE = "{assets_base}";
+        const SOUNDS_BASE = "{sounds_base}";
+        
+        // 注入各個 JS 模組
+        {audio_js}
+        {drawing_js}
+        {main_js}
+    </script>
+</body>
+</html> 
