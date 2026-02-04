@@ -2,6 +2,44 @@
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const time = Date.now();
+
+    if (gameState.walls) {
+        gameState.walls.forEach(w => {
+            ctx.save();
+            ctx.translate(w.x, w.y);
+            ctx.rotate(w.angle); // 牆壁可能有旋轉
+
+            // 繪製牆壁本體 (長方形)
+            // w.w = width (自己寬度), w.l = length (2.5倍)
+            // 繪製時中心點在 (0,0)
+            ctx.fillStyle = "#ffb86c"; // 橘色牆
+            ctx.shadowColor = "#ff79c6";
+            ctx.shadowBlur = 10;
+            
+            // 假設後端傳來的 w.w 是半寬 或 全寬，這裡假設是全寬
+            const halfW = w.w / 2;
+            const halfL = w.l / 2;
+            
+            ctx.fillRect(-halfL, -halfW, w.l, w.w);
+            
+            // 繪製邊框
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-halfL, -halfW, w.l, w.w);
+
+            // 繪製血量條 (在牆壁上方)
+            // 不旋轉血條，所以要 restore 再 save 或者反向旋轉？
+            // 簡單點，直接畫在牆壁上
+            ctx.restore(); 
+
+            // 繪製牆壁血條 (World Coordinates)
+            const hpRatio = w.hp / w.max_hp;
+            ctx.fillStyle = "red";
+            ctx.fillRect(w.x - 15, w.y - 15, 30, 4);
+            ctx.fillStyle = "#50fa7b";
+            ctx.fillRect(w.x - 15, w.y - 15, 30 * hpRatio, 4);
+        });
+    }
     
     // 1. 繪製道具 (Items)
     if (gameState.items) {
