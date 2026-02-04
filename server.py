@@ -117,11 +117,36 @@ async def move(sid, data):
 async def shoot(sid, data):
     if sid in gs.players:
         p = gs.players[sid]
-        angle = data.get('angle', -math.pi/2)
+        # 取得前端傳來的基礎角度 (弧度)
+        base_angle = data.get('angle', -math.pi/2) 
         w_conf = p.get_shoot_config()
-        if time.time() - p.last_shot_time > FIRE_COOLDOWN:
-            gs.bullets.append(Bullet(p.x+15, p.y, sid, "player", w_conf, angle_rad=angle))
-            p.last_shot_time = time.time()
+        
+        curr_time = time.time()
+        if curr_time - p.last_shot_time > FIRE_COOLDOWN:
+            # 讀取設定檔中的子彈數量
+            count = w_conf.get("count", 1)
+            
+            # 如果是散射或預設多彈頭
+            if isinstance(w_conf.get("angles"), list):
+                for angle_offset in w_conf["angles"]:
+                    # 將 config 裡的度數轉為弧度，並以 base_angle 為中心偏移
+                    # 注意：若 config 是相對偏移，則加 base_angle；
+                    # 若像你寫的是固定角度如 -90，則 base_angle 可能會被覆蓋
+                    # 這裡採用的邏輯是：如果只有一顆子彈，跟隨搖桿；多顆子彈則使用設定檔角度
+                    final_angle = math.radians(angle_offset) if count > 1 else base_angle
+                    
+                    gs.bullets.append(Bullet(
+                        p.x + 15, p.y + 15, sid, "player", 
+                        w_conf, angle_rad=final_angle
+                    ))
+            
+            # 處理特殊邏輯：弧射 (Arc) 隨機角度
+            elif w_conf.get("angles") == "random_45_135":
+                # 在 45~135 度之間隨機 (向上區間)
+                rand_angle = math.radians(random.uniform(-135, -45))
+                gs.bullets.append(Bullet(p.x + 15, p.y + 15, sid, "player", w_conf, angle_rad=rand_angle))
+            
+            p.last_shot_time = curr_time
 
 @sio.event
 async def build_wall(sid, data):
