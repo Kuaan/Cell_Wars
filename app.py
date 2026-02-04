@@ -355,7 +355,7 @@ html_code = f"""
             // 5. 繪製子彈 (特別處理 Arc 星月形)
             gameState.bullets.forEach(b => {{
                 // 檢查是否為 Arc 子彈 (紫色 #ff00ff)
-                if (b.c === '#ff00ff' || b.c === 'rgb(255, 0, 255)') {{
+                if (b.c === '#ff00ff' || b.c==='#aa00aa' || b.c === 'rgb(255, 0, 255)') {{
                     ctx.save();
                     ctx.translate(b.x, b.y);
                     // 讓它自轉 (基於時間)
@@ -366,7 +366,7 @@ html_code = f"""
                     ctx.fillStyle = "#ff00ff"; // 雖然 Emoji 有顏色，但有些瀏覽器會吃 fillStyle
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
-                    ctx.fillText("🌙", 0, 0); 
+                    ctx.fillText("🎵", 0, 0);  //🌙 
                     
                     ctx.restore();
                 }} else {{
