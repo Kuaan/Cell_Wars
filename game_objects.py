@@ -1,9 +1,16 @@
-import random, math, uuid, time
+import random
+import math
+import uuid
+import time
 from config import *
+# 確保這行與 utils.py 內容對齊
+from utils import check_collision, get_distance 
 
 class GameObject:
     def __init__(self, x, y, size):
-        self.x, self.y, self.size = x, y, size
+        self.x = x
+        self.y = y
+        self.size = size
 
 class Wall(GameObject):
     def __init__(self, x, y, width, height, owner_id):
