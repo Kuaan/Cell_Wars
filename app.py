@@ -1,9 +1,9 @@
-#v4.0 app.py
 import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Cell Wars V5", layout="wide")
 
+# 設定伺服器與資源路徑
 SERVER_URL = "https://cell-wars.onrender.com"
 GITHUB_USER = "Kuaan"
 GITHUB_REPO = "Cell_Wars"
@@ -75,10 +75,11 @@ html_code = f"""
         .btn-fire {{
             width: 75px; height: 75px; background: #ff5555; border-radius: 50%;
             border: 3px solid #ff9999; display: flex; align-items: center; justify-content: center;
-            font-weight: bold; box-shadow: 0 4px 0 #b30000; touch-action: none; user-select: none;
-            overflow: hidden; /* 防止圖片溢出 */
+            font-weight: bold; font-size: 30px; /* 加大字體以顯示 Emoji */
+            box-shadow: 0 4px 0 #b30000; touch-action: none; user-select: none;
+            overflow: hidden;
+            transition: transform 0.1s;
         }}
-        .btn-fire img {{ width: 70%; height: 70%; object-fit: contain; pointer-events: none; }}
         .btn-fire:active {{ box-shadow: 0 0 0; transform: translateY(4px); }}
         
         .btn-skill {{
@@ -98,8 +99,8 @@ html_code = f"""
 
     <div id="login-overlay">
         <div id="login-box">
-            <h1 style="color: #50fa7b; margin: 0 0 10px 0;">🦠 CELL WARS</h1>
-            <p style="color: #aaa; font-size: 12px;">iOS Web Audio API + Props</p>
+            <h1 style="color: #50fa7b; margin: 0 0 10px 0;">🦠 CELL WARS V5</h1>
+            <p style="color: #aaa; font-size: 12px;">Weapon System Online</p>
             <input type="text" id="name-input" placeholder="輸入名稱" maxlength="8">
             <button id="start-btn" disabled>資源載入中...</button>
         </div>
@@ -123,7 +124,7 @@ html_code = f"""
             </div>
             <div style="display:flex; gap:15px; align-items:flex-end;">
                 <div class="btn-skill disabled" id="skill-btn">SKILL</div>
-                <div class="btn-fire" id="fire-btn">FIRE</div>
+                <div class="btn-fire" id="fire-btn">🔥</div>
             </div>
         </div>
     </div>
@@ -135,7 +136,7 @@ html_code = f"""
         const assetsBase = "{ASSETS_BASE}";
         const soundsBase = "{SOUNDS_BASE}";
 
-        // --- Web Audio API (iOS 核心) ---
+        // --- Web Audio API ---
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
         
@@ -161,7 +162,8 @@ html_code = f"""
             boss_shot: soundsBase + "enemy/boss_shot.wav",
             e_hit: soundsBase + "enemy/enemy_hitted.wav",
             e_shot: soundsBase + "enemy/enemy_nor_shot.wav",
-            skill: soundsBase + "skill/slime.wav"
+            skill: soundsBase + "skill/slime.wav",
+            powerup: soundsBase + "skill/slime.wav" // 暫時共用音效
         }};
 
         async function loadSound(key, url) {{
@@ -175,7 +177,7 @@ html_code = f"""
 
         Promise.all(Object.keys(soundList).map(key => loadSound(key, soundList[key]))).then(() => {{
             const btn = document.getElementById('start-btn');
-            btn.innerText = "進入遊戲";
+            btn.innerText = "進入戰場";
             btn.disabled = false;
         }});
 
@@ -208,8 +210,8 @@ html_code = f"""
             gainNodeSFX.gain.setTargetAtTime(volSFX, audioCtx.currentTime, 0.1);
         }};
 
-        // --- 圖片載入 (擴充道具與武器圖示) ---
-        const skins = {{ cells: [], viruses: [], props: [], weapons: [], boss: null }};
+        // --- 圖片載入 ---
+        const skins = {{ cells: [], viruses: [], boss: null }};
         function loadImg(path) {{
             let img = new Image(); img.src = path;
             return img;
@@ -220,21 +222,14 @@ html_code = f"""
             skins.cells.push(loadImg(assetsBase + "cell_" + i + ".png"));
             skins.viruses.push(loadImg(assetsBase + "virus_" + i + ".png"));
         }}
-        // 載入道具 (prop_1.png, prop_2.png, ...)
-        for(let i=1; i<=3; i++) {{
-            skins.props.push(loadImg(assetsBase + "prop_" + i + ".png"));
-        }}
-        // 載入武器圖示 (weapon_1.png, weapon_2.png, ...)
-        for(let i=1; i<=5; i++) {{
-            skins.weapons.push(loadImg(assetsBase + "weapon_" + i + ".png"));
-        }}
         skins.boss = loadImg(assetsBase + "boss_1.png");
 
-        let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], props: [], skill_objects: [], w: false }};
+        let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], items: [], skill_objects: [], w: false }};
         let myId = null;
         let lastShotTime = 0;
 
         socket.on('connect', () => {{ myId = socket.id; }});
+        
         socket.on('sfx', (data) => {{
             switch(data.type) {{
                 case 'character_hitted': playSfx('p_hit'); break;
@@ -244,8 +239,10 @@ html_code = f"""
                 case 'enemy_hitted': playSfx('e_hit'); break;
                 case 'enemy_nor_shot': playSfx('e_shot'); break;
                 case 'skill_slime': playSfx('skill'); break;
+                case 'powerup': playSfx('powerup'); break; // 新增道具音效
             }}
         }});
+
         socket.on('state_update', (data) => {{
             gameState = data;
             requestAnimationFrame(draw);
@@ -273,46 +270,42 @@ html_code = f"""
             const sBtn = document.getElementById('skill-btn');
             if (me.charge >= 1) sBtn.classList.remove('disabled'); else sBtn.classList.add('disabled');
 
-            // --- 新增：武器按鈕圖示更新 ---
+            // --- 武器按鈕 (直接顯示後端傳來的 Emoji) ---
             const fBtn = document.getElementById('fire-btn');
-            if (me.w_icon) {{
-                // 如果有武器圖示 ID，顯示圖片
-                const iconIndex = me.w_icon - 1;
-                // 檢查是否已經插入圖片以避免頻繁重繪
-                if (!fBtn.querySelector('img') || fBtn.dataset.icon != me.w_icon) {{
-                    fBtn.innerHTML = ''; // 清空文字 "FIRE"
-                    let img = skins.weapons[iconIndex];
-                    if (img) {{
-                        // Clone node to put in button
-                        let clone = img.cloneNode(); 
-                        fBtn.appendChild(clone);
-                        fBtn.dataset.icon = me.w_icon;
-                    }} else {{
-                        fBtn.innerText = "FIRE";
-                    }}
-                }}
-            }} else {{
-                // 預設狀態
-                if (fBtn.innerHTML !== "FIRE") {{
-                     fBtn.innerHTML = "FIRE";
-                     fBtn.dataset.icon = "";
-                }}
+            if (me.w_icon && fBtn.innerText !== me.w_icon) {{
+                fBtn.innerText = me.w_icon; 
             }}
         }}
 
         function draw() {{
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 1. 繪製道具 (Props)
-            if (gameState.props) {{
-                gameState.props.forEach(p => {{
-                    // 假設 p.type 對應 prop_1, prop_2...
-                    let img = skins.props[(p.type || 1) - 1];
-                    // 繪製光暈效果 (可選)
+            // 1. 繪製道具 (Items) - 使用色塊代替圖片
+            if (gameState.items) {{
+                gameState.items.forEach(item => {{
+                    // 根據 type 決定顏色
+                    let color = '#ffffff';
+                    if (item.type.includes('spread')) color = '#ffff00';     // 黃色
+                    else if (item.type.includes('ricochet')) color = '#00ffff'; // 青色
+                    else if (item.type.includes('arc')) color = '#ff00ff';      // 紫色
+                    else if (item.type.includes('heal')) color = '#50fa7b';     // 綠色
+
                     ctx.save();
-                    ctx.shadowColor = "#f1fa8c";
-                    ctx.shadowBlur = 10;
-                    if(img && img.complete) ctx.drawImage(img, p.x, p.y, 25, 25);
+                    ctx.shadowColor = color;
+                    ctx.shadowBlur = 15;
+                    ctx.fillStyle = color;
+                    
+                    // 繪製膠囊形狀 (這裡簡化為圓形，因為像素畫風圓形也很清楚)
+                    ctx.beginPath();
+                    ctx.arc(item.x + 10, item.y + 10, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 加上白色核心讓它看起來像發光體
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(item.x + 10, item.y + 10, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                    
                     ctx.restore();
                 }});
             }}
@@ -340,31 +333,57 @@ html_code = f"""
                 }}
             }}
 
-            // 4. 繪製玩家
+            // 4. 繪製玩家 (含命數顯示)
             for (let id in gameState.players) {{
                 let p = gameState.players[id];
                 if (p.invincible) ctx.globalAlpha = 0.5;
+                
                 let img = skins.cells[(p.skin || 1) - 1];
                 if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
+                
                 ctx.globalAlpha = 1.0;
+                
+                // 名字與血條
                 ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
-                ctx.fillText(p.name, p.x+15, p.y-15);
-                const hpRatio = Math.max(0, p.hp / p.max_hp);
-                ctx.fillStyle = "#50fa7b"; ctx.fillRect(p.x, p.y-10, 30 * hpRatio, 4);
+                ctx.font = "12px Courier New";
+                
+                // 計算命數 (假設一條命為 5 HP，需與後端 Config 同步，這裡做視覺估算)
+                // 顯示邏輯：總血量 / 單條命最大血量 (後端沒傳單條命最大值，這裡暫時寫死 5 或根據比例)
+                // 更好的方式：後端傳 lives_count，但目前只有 hp/max_hp。
+                // 變通：顯示 "❤️ x N"
+                let estimatedLives = Math.ceil(p.hp / (p.max_hp / 5)); // 假設5條命
+                ctx.fillText(p.name + " ❤️x" + estimatedLives, p.x, p.y-15);
+
+                // 血條顯示 (顯示當前這條命的殘血)
+                let currentLifeHp = p.hp % (p.max_hp / 5);
+                if (currentLifeHp === 0 && p.hp > 0) currentLifeHp = (p.max_hp / 5);
+                let maxLifeHp = (p.max_hp / 5);
+                
+                const hpRatio = Math.max(0, currentLifeHp / maxLifeHp);
+                ctx.fillStyle = "#50fa7b"; 
+                ctx.fillRect(p.x, p.y-10, 30 * hpRatio, 4);
+                
+                // 血條外框
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 1;
+                ctx.strokeRect(p.x, p.y-10, 30, 4);
             }}
 
-            // 5. 繪製子彈 (支援顏色參數)
+            // 5. 繪製子彈 (支援後端傳來的顏色與大小)
             gameState.bullets.forEach(b => {{
                 ctx.beginPath();
-                if (b.color) {{
-                    ctx.fillStyle = b.color; // 優先使用後端傳來的顏色 (如 #ff00ff)
+                // 優先使用後端傳來的顏色 (b.c)，沒有則用預設邏輯
+                if (b.c) {{
+                    ctx.fillStyle = b.c;
                 }} else {{
-                    // 舊的 Fallback 邏輯
                     if (b.owner === 'boss') ctx.fillStyle = '#bd93f9';
                     else if (b.owner === 'enemy') ctx.fillStyle = '#ff5555';
                     else ctx.fillStyle = (b.owner === myId) ? '#f1fa8c' : '#8be9fd';
                 }}
-                ctx.arc(b.x, b.y, b.size || 4, 0, Math.PI*2); // 支援不同大小的子彈
+                
+                // 使用後端傳來的尺寸 (b.s)，預設為 4
+                let size = b.s || 4;
+                ctx.arc(b.x, b.y, size, 0, Math.PI*2);
                 ctx.fill();
             }});
 
@@ -391,7 +410,7 @@ html_code = f"""
 
         function doFire() {{
             const now = Date.now();
-            if (now - lastShotTime < 150) return;
+            if (now - lastShotTime < 150) return; // 前端簡單防抖，實際射速由後端控制
             lastShotTime = now;
             socket.emit('shoot');
             playSfx('p_shot');
