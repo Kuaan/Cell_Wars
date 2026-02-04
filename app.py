@@ -387,10 +387,29 @@ html_code = f"""
 
             // 6. 警告閃爍
             if (gameState.w) {{
+                const time = Date.now();
                 ctx.save();
                 const alpha = 0.2 + 0.15 * Math.sin(time * 0.01);
                 ctx.fillStyle = `rgba(255, 0, 0, ${{alpha}})`;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                const scanY = (time * 0.2) % canvas.height;
+                ctx.strokeStyle = "rgba(255, 50, 50, 0.5)";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, scanY); ctx.lineTo(canvas.width, scanY);
+                ctx.moveTo(0, canvas.height - scanY); ctx.lineTo(canvas.width, canvas.height - scanY);
+                ctx.stroke();
+                if (Math.floor(time / 250) % 2 === 0) {{
+                    ctx.translate(canvas.width/2, canvas.height/2);
+                    ctx.font = "bold 40px Courier New";
+                    ctx.fillStyle = "#ff5555";
+                    ctx.textAlign = "center";
+                    ctx.shadowColor = "red"; ctx.shadowBlur = 20;
+                    ctx.fillText("⚠ WARNING ⚠", 0, -20);
+                    ctx.font = "bold 20px Courier New";
+                    ctx.fillStyle = "#fff";
+                    ctx.fillText("BOSS APPROACHING", 0, 20);
+                }}
                 ctx.restore();
             }}
         }}
