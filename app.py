@@ -1,10 +1,10 @@
-#v4.0 app.py
+#v4.1 app.py
+
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Cell Wars V5", layout="wide")
+st.set_page_config(page_title="Cell Wars V5.1", layout="wide")
 
-# 設定伺服器與資源路徑
 SERVER_URL = "https://cell-wars.onrender.com"
 GITHUB_USER = "Kuaan"
 GITHUB_REPO = "Cell_Wars"
@@ -76,7 +76,7 @@ html_code = f"""
         .btn-fire {{
             width: 75px; height: 75px; background: #ff5555; border-radius: 50%;
             border: 3px solid #ff9999; display: flex; align-items: center; justify-content: center;
-            font-weight: bold; font-size: 30px; /* 加大字體以顯示 Emoji */
+            font-weight: bold; font-size: 30px; 
             box-shadow: 0 4px 0 #b30000; touch-action: none; user-select: none;
             overflow: hidden;
             transition: transform 0.1s;
@@ -100,8 +100,8 @@ html_code = f"""
 
     <div id="login-overlay">
         <div id="login-box">
-            <h1 style="color: #50fa7b; margin: 0 0 10px 0;">🦠 CELL WARS V5</h1>
-            <p style="color: #aaa; font-size: 12px;">Weapon System Online</p>
+            <h1 style="color: #50fa7b; margin: 0 0 10px 0;">🦠 CELL WARS V5.1</h1>
+            <p style="color: #aaa; font-size: 12px;">Boss Logic & Visuals Update</p>
             <input type="text" id="name-input" placeholder="輸入名稱" maxlength="8">
             <button id="start-btn" disabled>資源載入中...</button>
         </div>
@@ -164,7 +164,7 @@ html_code = f"""
             e_hit: soundsBase + "enemy/enemy_hitted.wav",
             e_shot: soundsBase + "enemy/enemy_nor_shot.wav",
             skill: soundsBase + "skill/slime.wav",
-            powerup: soundsBase + "skill/slime.wav" // 暫時共用音效
+            powerup: soundsBase + "skill/slime.wav" 
         }};
 
         async function loadSound(key, url) {{
@@ -218,7 +218,6 @@ html_code = f"""
             return img;
         }}
         
-        // 載入角色與敵人
         for(let i=1; i<=3; i++) {{
             skins.cells.push(loadImg(assetsBase + "cell_" + i + ".png"));
             skins.viruses.push(loadImg(assetsBase + "virus_" + i + ".png"));
@@ -240,7 +239,7 @@ html_code = f"""
                 case 'enemy_hitted': playSfx('e_hit'); break;
                 case 'enemy_nor_shot': playSfx('e_shot'); break;
                 case 'skill_slime': playSfx('skill'); break;
-                case 'powerup': playSfx('powerup'); break; // 新增道具音效
+                case 'powerup': playSfx('powerup'); break;
             }}
         }});
 
@@ -267,11 +266,9 @@ html_code = f"""
                 else {{ elSeg.classList.remove('full'); elFill.style.width = '0%'; }}
             }}
             
-            // 技能按鈕
             const sBtn = document.getElementById('skill-btn');
             if (me.charge >= 1) sBtn.classList.remove('disabled'); else sBtn.classList.add('disabled');
 
-            // --- 武器按鈕 (直接顯示後端傳來的 Emoji) ---
             const fBtn = document.getElementById('fire-btn');
             if (me.w_icon && fBtn.innerText !== me.w_icon) {{
                 fBtn.innerText = me.w_icon; 
@@ -280,33 +277,28 @@ html_code = f"""
 
         function draw() {{
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const time = Date.now();
             
-            // 1. 繪製道具 (Items) - 使用色塊代替圖片
+            // 1. 繪製道具 (Items)
             if (gameState.items) {{
                 gameState.items.forEach(item => {{
-                    // 根據 type 決定顏色
                     let color = '#ffffff';
-                    if (item.type.includes('spread')) color = '#ffff00';     // 黃色
-                    else if (item.type.includes('ricochet')) color = '#00ffff'; // 青色
-                    else if (item.type.includes('arc')) color = '#ff00ff';      // 紫色
-                    else if (item.type.includes('heal')) color = '#50fa7b';     // 綠色
+                    if (item.type.includes('spread')) color = '#ffff00';
+                    else if (item.type.includes('ricochet')) color = '#00ffff';
+                    else if (item.type.includes('arc')) color = '#ff00ff';
+                    else if (item.type.includes('heal')) color = '#50fa7b';
 
                     ctx.save();
                     ctx.shadowColor = color;
                     ctx.shadowBlur = 15;
                     ctx.fillStyle = color;
-                    
-                    // 繪製膠囊形狀 (這裡簡化為圓形，因為像素畫風圓形也很清楚)
                     ctx.beginPath();
                     ctx.arc(item.x + 10, item.y + 10, 12, 0, Math.PI * 2);
                     ctx.fill();
-                    
-                    // 加上白色核心讓它看起來像發光體
                     ctx.fillStyle = '#ffffff';
                     ctx.beginPath();
                     ctx.arc(item.x + 10, item.y + 10, 5, 0, Math.PI * 2);
                     ctx.fill();
-                    
                     ctx.restore();
                 }});
             }}
@@ -334,7 +326,7 @@ html_code = f"""
                 }}
             }}
 
-            // 4. 繪製玩家 (含命數顯示)
+            // 4. 繪製玩家
             for (let id in gameState.players) {{
                 let p = gameState.players[id];
                 if (p.invincible) ctx.globalAlpha = 0.5;
@@ -343,19 +335,11 @@ html_code = f"""
                 if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
                 
                 ctx.globalAlpha = 1.0;
-                
-                // 名字與血條
                 ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
                 ctx.font = "12px Courier New";
-                
-                // 計算命數 (假設一條命為 5 HP，需與後端 Config 同步，這裡做視覺估算)
-                // 顯示邏輯：總血量 / 單條命最大血量 (後端沒傳單條命最大值，這裡暫時寫死 5 或根據比例)
-                // 更好的方式：後端傳 lives_count，但目前只有 hp/max_hp。
-                // 變通：顯示 "❤️ x N"
-                let estimatedLives = Math.ceil(p.hp / (p.max_hp / 5)); // 假設5條命
+                let estimatedLives = Math.ceil(p.hp / (p.max_hp / 5)); 
                 ctx.fillText(p.name + " ❤️x" + estimatedLives, p.x, p.y-15);
 
-                // 血條顯示 (顯示當前這條命的殘血)
                 let currentLifeHp = p.hp % (p.max_hp / 5);
                 if (currentLifeHp === 0 && p.hp > 0) currentLifeHp = (p.max_hp / 5);
                 let maxLifeHp = (p.max_hp / 5);
@@ -363,34 +347,46 @@ html_code = f"""
                 const hpRatio = Math.max(0, currentLifeHp / maxLifeHp);
                 ctx.fillStyle = "#50fa7b"; 
                 ctx.fillRect(p.x, p.y-10, 30 * hpRatio, 4);
-                
-                // 血條外框
                 ctx.strokeStyle = "#fff";
                 ctx.lineWidth = 1;
                 ctx.strokeRect(p.x, p.y-10, 30, 4);
             }}
 
-            // 5. 繪製子彈 (支援後端傳來的顏色與大小)
+            // 5. 繪製子彈 (特別處理 Arc 星月形)
             gameState.bullets.forEach(b => {{
-                ctx.beginPath();
-                // 優先使用後端傳來的顏色 (b.c)，沒有則用預設邏輯
-                if (b.c) {{
-                    ctx.fillStyle = b.c;
+                // 檢查是否為 Arc 子彈 (紫色 #ff00ff)
+                if (b.c === '#ff00ff' || b.c === 'rgb(255, 0, 255)') {{
+                    ctx.save();
+                    ctx.translate(b.x, b.y);
+                    // 讓它自轉 (基於時間)
+                    ctx.rotate(time * 0.008); 
+                    
+                    // 繪製星月 (使用 Emoji 簡單高效且美觀，大小約 30x30)
+                    ctx.font = "30px sans-serif";
+                    ctx.fillStyle = "#ff00ff"; // 雖然 Emoji 有顏色，但有些瀏覽器會吃 fillStyle
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText("🌙", 0, 0); 
+                    
+                    ctx.restore();
                 }} else {{
-                    if (b.owner === 'boss') ctx.fillStyle = '#bd93f9';
-                    else if (b.owner === 'enemy') ctx.fillStyle = '#ff5555';
-                    else ctx.fillStyle = (b.owner === myId) ? '#f1fa8c' : '#8be9fd';
+                    // 一般子彈
+                    ctx.beginPath();
+                    if (b.c) {{
+                        ctx.fillStyle = b.c;
+                    }} else {{
+                        if (b.owner === 'boss') ctx.fillStyle = '#bd93f9';
+                        else if (b.owner === 'enemy') ctx.fillStyle = '#ff5555';
+                        else ctx.fillStyle = (b.owner === myId) ? '#f1fa8c' : '#8be9fd';
+                    }}
+                    let size = b.s || 4;
+                    ctx.arc(b.x, b.y, size, 0, Math.PI*2);
+                    ctx.fill();
                 }}
-                
-                // 使用後端傳來的尺寸 (b.s)，預設為 4
-                let size = b.s || 4;
-                ctx.arc(b.x, b.y, size, 0, Math.PI*2);
-                ctx.fill();
             }});
 
             // 6. 警告閃爍
             if (gameState.w) {{
-                const time = Date.now();
                 ctx.save();
                 const alpha = 0.2 + 0.15 * Math.sin(time * 0.01);
                 ctx.fillStyle = `rgba(255, 0, 0, ${{alpha}})`;
@@ -411,7 +407,7 @@ html_code = f"""
 
         function doFire() {{
             const now = Date.now();
-            if (now - lastShotTime < 150) return; // 前端簡單防抖，實際射速由後端控制
+            if (now - lastShotTime < 150) return;
             lastShotTime = now;
             socket.emit('shoot');
             playSfx('p_shot');
