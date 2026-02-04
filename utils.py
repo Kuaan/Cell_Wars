@@ -29,6 +29,26 @@ def get_distance(obj1, obj2):
     y2 = obj2.y if hasattr(obj2, 'y') else obj2['y']
     return math.sqrt((x1-x2)**2 + (y1-y2)**2)
 
+def check_circle_rect_collision(circle, rect):
+    """
+    檢查圓形(Player/Enemy/Bullet)與矩形(Wall)的碰撞
+    circle: {x, y, size}
+    rect: Wall 物件
+    """
+    # 這裡使用 AABB 簡化計算，若牆壁有旋轉則需要更複雜的 OBB 邏輯
+    # 為了效能，我們先假設牆壁是水平的 (長度在 X 軸或 Y 軸)
+    radius = circle.size / 2
+    cx, cy = circle.x + radius, circle.y + radius
+    
+    # 找出矩形上距離圓心最近的點
+    closest_x = max(rect.x, min(cx, rect.x + rect.width))
+    closest_y = max(rect.y, min(cy, rect.y + rect.height))
+    
+    dist_x = cx - closest_x
+    dist_y = cy - closest_y
+    
+    return (dist_x**2 + dist_y**2) < (radius**2)
+
 def compress_state(state):
     # 將複雜的物件轉為前端需要的精簡 JSON
     compressed = {
@@ -43,7 +63,14 @@ def compress_state(state):
             "charge": p.charge, "c": p.color,
             "invincible": p.is_invincible(),
             "w_icon": p.weapon_icon # 用於前端顯示 FIRE 鍵圖騰
+            "wall_cd": max(0, int(p.wall_cd_remaining())) # 新增 CD 傳回前端
         }
+        
+    for w in state["walls"]:
+        compressed["walls"].append({
+            "x": int(w.x), "y": int(w.y), "w": w.width, "l": w.height, # 這裡寬高根據牆壁方向決定
+            "hp": w.hp, "max_hp": w.max_hp
+        })
     
     for eid, e in state["enemies"].items():
         compressed["enemies"][eid] = {
