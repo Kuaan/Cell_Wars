@@ -62,6 +62,20 @@ canvas {
 }
 .btn-skill.disabled { opacity: 0.3; }
 
+.btn-wall {
+    background: #ffb86c !important; /* 橘色 */
+    border: 3px solid #ff79c6 !important;
+    color: #282a36 !important;
+    font-size: 18px !important;
+}
+.btn-wall.disabled {
+    opacity: 0.3;
+    filter: grayscale(100%);
+}
+
+/* 為了讓按鈕排列整齊，微調 actions-zone (選用) */
+#actions-zone { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+
 #charge-container { display: flex; gap: 4px; margin-bottom: 5px; }
 .charge-bar-segment { width: 25px; height: 10px; background: #333; transform: skewX(-15deg); position: relative; }
 .charge-fill { position: absolute; left: 0; top: 0; height: 100%; background: #f1fa8c; width: 0%; }
