@@ -1,4 +1,4 @@
-# v3.8.0 app.py (iOS Optimized - Web Audio API) 
+#v4.0 app.py
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -46,7 +46,6 @@ html_code = f"""
             border: 2px solid #50fa7b; text-align: center; width: 85%; max-width: 400px;
         }}
         input {{ margin: 15px 0; padding: 12px; font-size: 18px; width: 100%; text-align: center; background: #222; color: #fff; border: 1px solid #444; border-radius: 8px; }}
-        /* 增加按鈕載入狀態樣式 */
         button {{ padding: 15px 40px; font-size: 18px; background: #50fa7b; color: #000; border: none; border-radius: 8px; font-weight: bold; width: 100%; cursor: pointer; transition: 0.3s; }}
         button:disabled {{ background: #555; color: #888; cursor: not-allowed; }}
 
@@ -77,8 +76,11 @@ html_code = f"""
             width: 75px; height: 75px; background: #ff5555; border-radius: 50%;
             border: 3px solid #ff9999; display: flex; align-items: center; justify-content: center;
             font-weight: bold; box-shadow: 0 4px 0 #b30000; touch-action: none; user-select: none;
+            overflow: hidden; /* 防止圖片溢出 */
         }}
+        .btn-fire img {{ width: 70%; height: 70%; object-fit: contain; pointer-events: none; }}
         .btn-fire:active {{ box-shadow: 0 0 0; transform: translateY(4px); }}
+        
         .btn-skill {{
             width: 55px; height: 55px; background: #8be9fd; border-radius: 50%;
             border: 3px solid #cyan; display: flex; align-items: center; justify-content: center;
@@ -97,7 +99,7 @@ html_code = f"""
     <div id="login-overlay">
         <div id="login-box">
             <h1 style="color: #50fa7b; margin: 0 0 10px 0;">🦠 CELL WARS</h1>
-            <p style="color: #aaa; font-size: 12px;">iOS 優化版 (Web Audio API)</p>
+            <p style="color: #aaa; font-size: 12px;">iOS Web Audio API + Props</p>
             <input type="text" id="name-input" placeholder="輸入名稱" maxlength="8">
             <button id="start-btn" disabled>資源載入中...</button>
         </div>
@@ -133,26 +135,23 @@ html_code = f"""
         const assetsBase = "{ASSETS_BASE}";
         const soundsBase = "{SOUNDS_BASE}";
 
-        // --- Web Audio API 系統 (解決 iOS 卡頓的核心) ---
+        // --- Web Audio API (iOS 核心) ---
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
         
-        // 音量節點
         const gainNodeBGM = audioCtx.createGain();
         const gainNodeSFX = audioCtx.createGain();
         gainNodeBGM.connect(audioCtx.destination);
         gainNodeSFX.connect(audioCtx.destination);
 
-        // 緩衝區儲存
         const audioBuffers = {{}};
-        const bgmSourceNode = {{ current: null }}; // 追蹤 BGM 播放實例
+        const bgmSourceNode = {{ current: null }};
 
         let volBGM = 0.4;
         let volSFX = 0.6;
         gainNodeBGM.gain.value = volBGM;
         gainNodeSFX.gain.value = volSFX;
 
-        // 定義音效清單
         const soundList = {{
             bgm: soundsBase + "bgm/bgm-145a.wav",
             p_hit: soundsBase + "characters/character_hitted.wav",
@@ -165,32 +164,23 @@ html_code = f"""
             skill: soundsBase + "skill/slime.wav"
         }};
 
-        // 下載並解碼音效 (非同步)
         async function loadSound(key, url) {{
             try {{
                 const response = await fetch(url);
                 const arrayBuffer = await response.arrayBuffer();
                 const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
                 audioBuffers[key] = decodedBuffer;
-                console.log(`Loaded ${{key}}`);
-            }} catch(e) {{
-                console.error(`Error loading ${{key}}:`, e);
-            }}
+            }} catch(e) {{ console.error(`Error loading ${{key}}:`, e); }}
         }}
 
-        // 啟動所有下載
         Promise.all(Object.keys(soundList).map(key => loadSound(key, soundList[key]))).then(() => {{
             const btn = document.getElementById('start-btn');
             btn.innerText = "進入遊戲";
             btn.disabled = false;
         }});
 
-        // 播放音效 (極低延遲)
         function playSfx(key) {{
-            if (volSFX <= 0.01) return;
-            if (!audioBuffers[key]) return;
-
-            // 每次播放都建立一個新的 BufferSource (輕量級)
+            if (volSFX <= 0.01 || !audioBuffers[key]) return;
             const source = audioCtx.createBufferSource();
             source.buffer = audioBuffers[key];
             source.connect(gainNodeSFX);
@@ -199,10 +189,7 @@ html_code = f"""
 
         function playBGM() {{
             if (!audioBuffers['bgm']) return;
-            // 如果已經在播，先停掉
-            if (bgmSourceNode.current) {{
-                try {{ bgmSourceNode.current.stop(); }} catch(e) {{}}
-            }}
+            if (bgmSourceNode.current) {{ try {{ bgmSourceNode.current.stop(); }} catch(e) {{}} }}
             const source = audioCtx.createBufferSource();
             source.buffer = audioBuffers['bgm'];
             source.loop = true;
@@ -211,12 +198,9 @@ html_code = f"""
             bgmSourceNode.current = source;
         }}
 
-        // 音量控制
         document.getElementById('vol-bgm').oninput = function() {{
             volBGM = parseFloat(this.value);
             gainNodeBGM.gain.setTargetAtTime(volBGM, audioCtx.currentTime, 0.1);
-            
-            // 如果音量歸零暫停 (WebAudio 其實不需要暫停，靜音即可，但為了省電可選)
             if (volBGM > 0 && audioCtx.state === 'suspended') audioCtx.resume();
         }};
         document.getElementById('vol-sfx').oninput = function() {{
@@ -224,24 +208,33 @@ html_code = f"""
             gainNodeSFX.gain.setTargetAtTime(volSFX, audioCtx.currentTime, 0.1);
         }};
 
-        // --- 圖片載入 ---
-        const skins = {{ cells: [], viruses: [], boss: null }};
+        // --- 圖片載入 (擴充道具與武器圖示) ---
+        const skins = {{ cells: [], viruses: [], props: [], weapons: [], boss: null }};
         function loadImg(path) {{
             let img = new Image(); img.src = path;
             return img;
         }}
+        
+        // 載入角色與敵人
         for(let i=1; i<=3; i++) {{
             skins.cells.push(loadImg(assetsBase + "cell_" + i + ".png"));
             skins.viruses.push(loadImg(assetsBase + "virus_" + i + ".png"));
         }}
+        // 載入道具 (prop_1.png, prop_2.png, ...)
+        for(let i=1; i<=3; i++) {{
+            skins.props.push(loadImg(assetsBase + "prop_" + i + ".png"));
+        }}
+        // 載入武器圖示 (weapon_1.png, weapon_2.png, ...)
+        for(let i=1; i<=5; i++) {{
+            skins.weapons.push(loadImg(assetsBase + "weapon_" + i + ".png"));
+        }}
         skins.boss = loadImg(assetsBase + "boss_1.png");
 
-        let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], skill_objects: [], w: false }};
+        let gameState = {{ players: {{}}, enemies: {{}}, bullets: [], props: [], skill_objects: [], w: false }};
         let myId = null;
         let lastShotTime = 0;
 
         socket.on('connect', () => {{ myId = socket.id; }});
-
         socket.on('sfx', (data) => {{
             switch(data.type) {{
                 case 'character_hitted': playSfx('p_hit'); break;
@@ -253,7 +246,6 @@ html_code = f"""
                 case 'skill_slime': playSfx('skill'); break;
             }}
         }});
-
         socket.on('state_update', (data) => {{
             gameState = data;
             requestAnimationFrame(draw);
@@ -263,9 +255,12 @@ html_code = f"""
         function updateUI() {{
             if (!myId || !gameState.players[myId]) return;
             const me = gameState.players[myId];
+            
+            // 排行榜
             const sorted = Object.values(gameState.players).sort((a,b)=>b.score-a.score).slice(0,3);
             document.getElementById('lb-content').innerHTML = sorted.map((p, i) => `<span class="score-pill">${{i==0?'👑':''}}${{p.name}}:${{p.score}}</span>`).join('');
 
+            // 能量條
             for(let i=1; i<=3; i++) {{
                 const elSeg = document.getElementById('seg'+i);
                 const elFill = document.getElementById('fill'+i);
@@ -273,13 +268,56 @@ html_code = f"""
                 else if (me.charge === i - 1) {{ elSeg.classList.remove('full'); elFill.style.width = ((me.hit_accumulated / 20) * 100) + '%'; }}
                 else {{ elSeg.classList.remove('full'); elFill.style.width = '0%'; }}
             }}
-            const btn = document.getElementById('skill-btn');
-            if (me.charge >= 1) btn.classList.remove('disabled'); else btn.classList.add('disabled');
+            
+            // 技能按鈕
+            const sBtn = document.getElementById('skill-btn');
+            if (me.charge >= 1) sBtn.classList.remove('disabled'); else sBtn.classList.add('disabled');
+
+            // --- 新增：武器按鈕圖示更新 ---
+            const fBtn = document.getElementById('fire-btn');
+            if (me.w_icon) {{
+                // 如果有武器圖示 ID，顯示圖片
+                const iconIndex = me.w_icon - 1;
+                // 檢查是否已經插入圖片以避免頻繁重繪
+                if (!fBtn.querySelector('img') || fBtn.dataset.icon != me.w_icon) {{
+                    fBtn.innerHTML = ''; // 清空文字 "FIRE"
+                    let img = skins.weapons[iconIndex];
+                    if (img) {{
+                        // Clone node to put in button
+                        let clone = img.cloneNode(); 
+                        fBtn.appendChild(clone);
+                        fBtn.dataset.icon = me.w_icon;
+                    }} else {{
+                        fBtn.innerText = "FIRE";
+                    }}
+                }}
+            }} else {{
+                // 預設狀態
+                if (fBtn.innerHTML !== "FIRE") {{
+                     fBtn.innerHTML = "FIRE";
+                     fBtn.dataset.icon = "";
+                }}
+            }}
         }}
 
         function draw() {{
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
+            // 1. 繪製道具 (Props)
+            if (gameState.props) {{
+                gameState.props.forEach(p => {{
+                    // 假設 p.type 對應 prop_1, prop_2...
+                    let img = skins.props[(p.type || 1) - 1];
+                    // 繪製光暈效果 (可選)
+                    ctx.save();
+                    ctx.shadowColor = "#f1fa8c";
+                    ctx.shadowBlur = 10;
+                    if(img && img.complete) ctx.drawImage(img, p.x, p.y, 25, 25);
+                    ctx.restore();
+                }});
+            }}
+
+            // 2. 繪製技能物件
             ctx.globalAlpha = 0.6;
             (gameState.skill_objects || []).forEach(obj => {{
                 let img = skins.cells[(obj.skin || 1) - 1];
@@ -287,6 +325,7 @@ html_code = f"""
             }});
             ctx.globalAlpha = 1.0;
 
+            // 3. 繪製敵人
             for (let id in gameState.enemies) {{
                 let e = gameState.enemies[id];
                 if (e.type === 999) {{
@@ -301,6 +340,7 @@ html_code = f"""
                 }}
             }}
 
+            // 4. 繪製玩家
             for (let id in gameState.players) {{
                 let p = gameState.players[id];
                 if (p.invincible) ctx.globalAlpha = 0.5;
@@ -313,21 +353,28 @@ html_code = f"""
                 ctx.fillStyle = "#50fa7b"; ctx.fillRect(p.x, p.y-10, 30 * hpRatio, 4);
             }}
 
+            // 5. 繪製子彈 (支援顏色參數)
             gameState.bullets.forEach(b => {{
                 ctx.beginPath();
-                if (b.owner === 'boss') {{ ctx.fillStyle = '#bd93f9'; ctx.arc(b.x, b.y, 8, 0, Math.PI*2); }}
-                else if (b.owner === 'enemy') {{ ctx.fillStyle = '#ff5555'; ctx.arc(b.x, b.y, 3, 0, Math.PI*2); }}
-                else {{ ctx.fillStyle = (b.owner === myId) ? '#f1fa8c' : '#8be9fd'; ctx.arc(b.x, b.y, 4, 0, Math.PI*2); }}
+                if (b.color) {{
+                    ctx.fillStyle = b.color; // 優先使用後端傳來的顏色 (如 #ff00ff)
+                }} else {{
+                    // 舊的 Fallback 邏輯
+                    if (b.owner === 'boss') ctx.fillStyle = '#bd93f9';
+                    else if (b.owner === 'enemy') ctx.fillStyle = '#ff5555';
+                    else ctx.fillStyle = (b.owner === myId) ? '#f1fa8c' : '#8be9fd';
+                }}
+                ctx.arc(b.x, b.y, b.size || 4, 0, Math.PI*2); // 支援不同大小的子彈
                 ctx.fill();
             }});
 
+            // 6. 警告閃爍
             if (gameState.w) {{
                 const time = Date.now();
                 ctx.save();
                 const alpha = 0.2 + 0.15 * Math.sin(time * 0.01);
                 ctx.fillStyle = `rgba(255, 0, 0, ${{alpha}})`;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
-                // ...existing warning drawing code...
                 ctx.restore();
             }}
         }}
@@ -350,9 +397,7 @@ html_code = f"""
             playSfx('p_shot');
         }}
 
-        function doSkill() {{
-            socket.emit('use_skill');
-        }}
+        function doSkill() {{ socket.emit('use_skill'); }}
 
         document.getElementById('fire-btn').addEventListener('touchstart', (e) => {{ e.preventDefault(); doFire(); }});
         document.getElementById('fire-btn').addEventListener('mousedown', (e) => {{ e.preventDefault(); doFire(); }});
@@ -364,16 +409,11 @@ html_code = f"""
             if (e.key === 'q' || e.key === 'Q') doSkill();
         }});
 
-        // --- 核心修復：在使用者互動時解鎖 AudioContext ---
         document.getElementById('start-btn').onclick = function() {{
-            // iOS 要求在 click 事件中 resume context
             if (audioCtx.state === 'suspended') {{
-                audioCtx.resume().then(() => {{
-                    console.log("AudioContext unlocked");
-                }});
+                audioCtx.resume().then(() => {{ console.log("AudioContext unlocked"); }});
             }}
-            playBGM(); // 播放 BGM
-
+            playBGM();
             const name = document.getElementById('name-input').value || 'Cell';
             socket.emit('join_game', {{ name: name }});
             document.getElementById('login-overlay').style.display = 'none';
