@@ -1,4 +1,4 @@
-# config.py
+# config.py 4.1
 import math
 
 # --- 地圖與基礎設定 ---
@@ -41,13 +41,13 @@ WEAPON_CONFIG = {
     "spread_lv1": {
         "condition": "spread_item", "level": 1,
         "count": 3, "damage": 1, "speed": 10, "size": 5,
-        "angles": [20, 90, 160], # 玩家前方為90度(對應Y軸負方向)
+        "angles": [-20, -90, -160], # 玩家前方為90度(對應Y軸負方向)
         "type": "linear", "hits": 1, "bounce": 0, "color": "#ffff00"
     },
     "spread_lv2": {
         "condition": "spread_item", "level": 2,
         "count": 5, "damage": 1, "speed": 10, "size": 5,
-        "angles": [20, 60, 90, 120, 160],
+        "angles": [-20, -60, -90, -120, -160],
         "type": "linear", "hits": 1, "bounce": 0, "color": "#ffcc00"
     },
     # 彈射 (Ricochet)
