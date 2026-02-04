@@ -5,14 +5,15 @@
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
+        /* CSS 將會注入這裡 */
         {style} 
     </style>
 </head>
 <body>
     <div id="login-overlay">
         <div id="login-box">
-            <h1 class="title">🦠 CELL WARS V5.1</h1>
-            <p class="subtitle">Refactored Client</p>
+            <h1 style="color: #50fa7b; margin: 0 0 10px 0;">🦠 CELL WARS V5.1</h1>
+            <p style="color: #aaa; font-size: 12px;">Refactored Client</p>
             <input type="text" id="name-input" placeholder="輸入名稱" maxlength="8">
             <button id="start-btn" disabled>資源載入中...</button>
         </div>
@@ -42,15 +43,20 @@
     </div>
 
     <script>
-        // 初始化變數
+        // 定義全域常數，讓注入的 JS 檔案可以使用
         const SERVER_URL = "{server_url}";
         const ASSETS_BASE = "{assets_base}";
         const SOUNDS_BASE = "{sounds_base}";
         
-        // 注入各個 JS 模組
+        // 依序注入程式碼
+        // 1. 音效邏輯 (定義 audioCtx, playSfx)
         {audio_js}
+
+        // 2. 繪圖邏輯 (定義 draw)
         {drawing_js}
+
+        // 3. 主邏輯 (啟動 socket, 監聽事件)
         {main_js}
     </script>
 </body>
-</html> 
+</html>
