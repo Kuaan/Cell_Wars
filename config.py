@@ -1,4 +1,4 @@
-# config.py 4.1
+# config.py 4.0
 import math
 
 # --- 地圖與基礎設定 ---
@@ -53,13 +53,13 @@ WEAPON_CONFIG = {
     # 彈射 (Ricochet)
     "ricochet_lv1": {
         "condition": "ricochet_item", "level": 1,
-        "count": 1, "damage": 1, "bounce_damage": 0.3, "speed": 10,
+        "count": 1, "damage": 1, "bounce_damage": 0.3, "speed": 8,
         "angles": [-90],
         "type": "bounce", "hits": 1, "bounce": 3, "size": 6, "color": "#00ffff"
     },
     "ricochet_lv2": {
         "condition": "ricochet_item", "level": 2,
-        "count": 1, "damage": 1, "bounce_damage": 0.3, "speed": 10,
+        "count": 1, "damage": 1, "bounce_damage": 0.3, "speed": 8,
         "angles": [-90],
         "type": "bounce", "hits": 1, "bounce": 5, "size": 6, "color": "#0088ff"
     },
