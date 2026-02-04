@@ -37,6 +37,8 @@ socket.on('sfx', (data) => {
         case 'powerup': playSfx('powerup'); break;
     }
 });
+let currentAngle = 0; // 預設 0
+let lastMoveVector = { x: 0, y: 0 };
 
 // 更新畫面
 socket.on('state_update', (data) => {
@@ -65,6 +67,17 @@ function updateUI() {
     const sBtn = document.getElementById('skill-btn');
     if (me.charge >= 1) sBtn.classList.remove('disabled'); else sBtn.classList.add('disabled');
 
+    // 蓋牆按鈕狀態 (假設後端會在 player 物件回傳 wall_cd > 0 代表冷卻中)
+    const wBtn = document.getElementById('wall-btn');
+    // 如果 me.wall_cd 存在且大於 0，就 disable
+    if (me.wall_cd && me.wall_cd > 0) {
+        wBtn.classList.add('disabled');
+        wBtn.innerText = Math.ceil(me.wall_cd); // 顯示倒數秒數
+    } else {
+        wBtn.classList.remove('disabled');
+        wBtn.innerText = "🚧";
+    }
+
     const fBtn = document.getElementById('fire-btn');
     if (me.w_icon && fBtn.innerText !== me.w_icon) {
         fBtn.innerText = me.w_icon; 
@@ -79,18 +92,44 @@ const manager = nipplejs.create({
     size: 100,
     color: 'white'
 });
-manager.on('move', (evt, data) => { if(data.vector) socket.emit('move', { dx: data.vector.x, dy: -data.vector.y }); });
-manager.on('end', () => { socket.emit('move', { dx: 0, dy: 0 }); });
+manager.on('move', (evt, data) => { 
+    if(data.vector) {
+        // 記錄最後移動向量
+        lastMoveVector = { dx: data.vector.x, dy: -data.vector.y };
+        // 記錄角度 (NippleJS return radians, but usually math.atan2 is better for server consistency)
+        // 這裡我們直接存 data.angle.radian (NippleJS 提供)
+        // 注意：NippleJS 的 Y 軸向上是正，Canvas/Screen Y 軸向下是正。
+        // 我們手動算比較保險：Math.atan2(dy, dx)
+        currentAngle = Math.atan2(-data.vector.y, data.vector.x);
+        
+        socket.emit('move', lastMoveVector); 
+    }
+});
+manager.on('end', () => { 
+    socket.emit('move', { dx: 0, dy: 0 }); 
+    // 不重置角度，這樣可以停下來後朝最後方向射擊
+});
 
 function doFire() {
     const now = Date.now();
     if (now - lastShotTime < 150) return;
     lastShotTime = now;
-    socket.emit('shoot');
+    
+    // 發送射擊指令，帶上角度
+    socket.emit('shoot', { angle: currentAngle });
     playSfx('p_shot');
 }
 
 function doSkill() { socket.emit('use_skill'); }
+
+// 新增：蓋牆指令
+function doBuildWall() {
+    // 簡單防呆，前端也檢查一下
+    if (gameState.players[myId] && gameState.players[myId].wall_cd > 0) return;
+    socket.emit('build_wall', { angle: currentAngle });
+}
+document.getElementById('wall-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doBuildWall(); });
+document.getElementById('wall-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doBuildWall(); });
 
 document.getElementById('fire-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doFire(); });
 document.getElementById('fire-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doFire(); });
