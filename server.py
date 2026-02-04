@@ -1,4 +1,4 @@
-# 4.0 server.py 
+# 4.1 server.py 
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -19,10 +19,11 @@ sio_app = socketio.ASGIApp(sio, app)
 
 # --- 全域狀態 ---
 game_vars = {
-    "boss_phase": "initial",
+    "boss_phase": "initial", # 初始狀態
     "phase_start_time": 0,
     "elite_kill_count": 0,
-    "target_kills": 10
+    "target_kills": 5,        # 測試用設 5，正式可改回 10
+    "boss_score_threshold": 500 # 分數達到 500 啟動第一次魔王
 }
 
 # 使用物件管理 State
@@ -84,20 +85,37 @@ async def game_loop():
         gs.skill_objects = active_skills
 
         # 2. 敵人生成與 Boss 狀態機
-        if game_vars["boss_phase"] == "countdown":
+        
+        # 取得當前最高分
+        max_score = max([p.score for p in gs.players.values()] or [0])
+
+        # --- 狀態轉換邏輯 ---
+        if game_vars["boss_phase"] == "initial":
+            # 條件 A: 分數達標 OR 條件 B: 已經殺了一些小怪 (這裡用分數判定)
+            if max_score >= game_vars["boss_score_threshold"]:
+                game_vars["boss_phase"] = "countdown"
+                game_vars["phase_start_time"] = curr
+
+        elif game_vars["boss_phase"] == "countdown":
+            # 倒數 25 秒準備進入警告
             if curr - game_vars["phase_start_time"] > 25:
                 game_vars["boss_phase"] = "warning"
                 game_vars["phase_start_time"] = curr
                 gs.warning_active = True
                 sfx_buffer.append({'type': 'boss_coming'})
+
         elif game_vars["boss_phase"] == "warning":
+            # 警告 5 秒後正式出生
             if curr - game_vars["phase_start_time"] > 5:
                 spawn_boss()
                 sfx_buffer.append({'type': 'boss_coming'})
 
+        # --- 敵人生成控制 ---
+        # 只有在非 Boss 戰期間才生成普通小怪
         if len(gs.enemies) < MAX_ENEMIES and game_vars["boss_phase"] != "boss_active":
             rand_val = random.random()
-            v_type = 3 if rand_val < 0.1 else (2 if rand_val < 0.3 else 1)
+            # 根據狀態調整精英怪出現機率
+            v_type = 3 if rand_val < 0.15 else (2 if rand_val < 0.4 else 1)
             enemy = Enemy(v_type)
             gs.enemies[enemy.id] = enemy
 
