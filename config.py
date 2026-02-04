@@ -73,7 +73,7 @@ WEAPON_CONFIG = {
     },
     "arc_lv2": {
         "condition": "arc_item", "level": 2,
-        "count": 1, "damage": 2, "speed": 6,
+        "count": 1, "damage": 3, "speed": 6,
         "fire_rate_mult": 0.6,
         "type": "arc", "angles": "random_45_135",
         "size_mult": 1.5, "range": MAP_HEIGHT * 0.5, "color": "#aa00aa"
