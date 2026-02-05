@@ -50,6 +50,16 @@ function draw() {
         }
     }
 
+    // 畫牆壁
+    ctx.fillStyle = "#7f8c8d";
+    gameState.walls.forEach(w => {
+        ctx.fillRect(w.x, w.y, w.width, w.height);
+        // 畫血條 (選擇性)
+        ctx.fillStyle = "red";
+        ctx.fillRect(w.x, w.y - 5, w.width * (w.hp / w.max_hp), 3);
+        ctx.fillStyle = "#7f8c8d"; // Reset color
+    });
+
     // 4. 繪製玩家
     for (let id in gameState.players) {
         let p = gameState.players[id];
