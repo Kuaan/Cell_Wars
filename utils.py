@@ -1,7 +1,17 @@
-# utils.py
+# utils.py 5.2
 import math
 import time
-
+def check_rect_collision(circle_x, circle_y, circle_r, rect_x, rect_y, rect_w, rect_h):
+    """檢查圓形與矩形是否碰撞 (用於牆壁阻擋)"""
+    # 找矩形上距離圓心最近的點
+    closest_x = max(rect_x, min(circle_x, rect_x + rect_w))
+    closest_y = max(rect_y, min(circle_y, rect_y + rect_h))
+    
+    dist_x = circle_x - closest_x
+    dist_y = circle_y - closest_y
+    
+    return (dist_x**2 + dist_y**2) < (circle_r**2)
+    
 def check_collision(obj1, obj2, r1_override=None, r2_override=None):
     # 支援字典或物件屬性存取
     x1 = obj1.x if hasattr(obj1, 'x') else obj1['x']
@@ -33,7 +43,7 @@ def compress_state(state):
     # 將複雜的物件轉為前端需要的精簡 JSON
     compressed = {
         "players": {}, "enemies": {}, "bullets": [], 
-        "items": [], "skill_objects": [], "w": state["warning_active"]
+        "items": [], "skill_objects": [], "walls": [], "w": state["warning_active"]
     }
     
     for pid, p in state["players"].items():
@@ -60,6 +70,16 @@ def compress_state(state):
     for i in state["items"]:
         compressed["items"].append({
             "x": int(i.x), "y": int(i.y), "type": i.item_type
+        })
+        
+    for w in state.get("walls", []): # 使用 .get 防止 state 裡還沒有 walls 鍵時報錯
+        compressed["walls"].append({
+            "x": int(w.x), 
+            "y": int(w.y), 
+            "w": int(w.w), 
+            "h": int(w.h), 
+            "hp": int(w.hp), 
+            "m_hp": int(w.max_hp) # 縮寫 m_hp 減少傳輸量
         })
 
     # Skill Objects (保留原本邏輯)
