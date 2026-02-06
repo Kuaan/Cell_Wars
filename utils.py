@@ -1,135 +1,90 @@
+# utils.py
 import math
 
-# --- Helper Functions (內部使用) ---
-def get_obj_info(obj):
+def check_collision(obj1, obj2, r1_override=None, r2_override=None):
     """
-    統一從 物件(Object) 或 字典(Dict) 中提取 x, y, size。
-    回傳: (x, y, size, center_x, center_y)
+    通用圓形碰撞檢測
     """
-    # 判斷是 Object 還是 Dict 來取得屬性
-    if isinstance(obj, dict):
-        x = obj.get('x', 0)
-        y = obj.get('y', 0)
-        size = obj.get('size', 20)
-        width = obj.get('width', size)   # 預留給非正方形物件
-        height = obj.get('height', size) # 預留給非正方形物件
-    else:
-        x = getattr(obj, 'x', 0)
-        y = getattr(obj, 'y', 0)
-        size = getattr(obj, 'size', 20)
-        width = getattr(obj, 'width', size)
-        height = getattr(obj, 'height', size)
+    # 為了效能，優先讀取屬性，若無則讀取字典
+    x1 = getattr(obj1, 'x', obj1.get('x', 0))
+    y1 = getattr(obj1, 'y', obj1.get('y', 0))
+    # 如果物件有 radius 屬性優先使用，否則用 size / 2
+    r1 = r1_override if r1_override is not None else getattr(obj1, 'radius', obj1.get('size', 20) / 2)
 
-    # 計算中心點 (假設 x, y 是左上角)
-    cx = x + width / 2
-    cy = y + height / 2
+    x2 = getattr(obj2, 'x', obj2.get('x', 0))
+    y2 = getattr(obj2, 'y', obj2.get('y', 0))
+    r2 = r2_override if r2_override is not None else getattr(obj2, 'radius', obj2.get('size', 20) / 2)
+
+    # 距離平方計算 (比開根號快)
+    dist_sq = (x1 - x2) ** 2 + (y1 - y2) ** 2
     
-    return x, y, size, cx, cy
+    # 碰撞判定：距離 < 半徑之和
+    # * 0.8 是為了讓判定稍微寬鬆一點(Hitbox比貼圖小)，手感較好
+    radius_sum = (r1 + r2) * 0.8 
+    return dist_sq < (radius_sum ** 2)
 
-# --- Core Functions ---
-
-def check_collision(obj1, obj2, hit_ratio=0.8):
-    """
-    圓形碰撞檢測
-    :param hit_ratio: 碰撞箱係數 (0.8 表示判定範圍是圖片大小的 80%)
-    """
-    _, _, size1, cx1, cy1 = get_obj_info(obj1)
-    _, _, size2, cx2, cy2 = get_obj_info(obj2)
-
-    # 半徑計算 (基於 size * hit_ratio)
-    r1 = (size1 / 2) * hit_ratio
-    r2 = (size2 / 2) * hit_ratio
-
-    dist_sq = (cx1 - cx2) ** 2 + (cy1 - cy2) ** 2
-    radius_sum_sq = (r1 + r2) ** 2
-    
-    return dist_sq < radius_sum_sq
-
-def get_distance(obj1, obj2):
-    """
-    計算兩個物件「中心點」之間的距離
-    """
-    _, _, _, cx1, cy1 = get_obj_info(obj1)
-    _, _, _, cx2, cy2 = get_obj_info(obj2)
-    
-    return math.sqrt((cx1 - cx2)**2 + (cy1 - cy2)**2)
+def get_distance(x1, y1, x2, y2):
+    return math.sqrt((x1 - x2)**2 + (y1 - y2)**2)
 
 def compress_state(state):
     """
-    將遊戲狀態壓縮為 JSON 格式傳給前端
-    優化：加入 angle (角度) 支援，並統一處理整數化
+    將後端物件狀態壓縮為極簡 JSON 格式傳給前端
+    優化原則：
+    1. 只傳變動數據 (x, y, hp)
+    2. 使用短 Key (p=players, b=bullets, e=enemies)
+    3. 座標取整數 (像素風不需要小數點精度)
     """
     compressed = {
-        "players": {}, 
-        "enemies": {}, 
-        "bullets": [], 
-        "items": [], 
-        "skill_objects": [], 
-        "w": state.get("warning_active", False)
+        "p": {},  # Players
+        "e": [],  # Enemies (改為列表，減少ID傳輸，前端只負責渲染)
+        "b": [],  # Bullets
+        "i": [],  # Items
+        "ev": state.get("events", []) # 用於播放音效或特殊特效的事件列表
     }
     
-    # --- Players ---
+    # 壓縮玩家數據
     for pid, p in state["players"].items():
-        compressed["players"][pid] = {
+        compressed["p"][pid] = {
             "x": int(p.x),
             "y": int(p.y),
-            "skin": p.skin,
-            "name": p.name,
-            "hp": max(0, int(p.hp)),
-            "max_hp": int(p.max_hp),
-            "score": int(p.score),
-            "charge": round(p.charge, 1), # 保留一位小數用於 UI 顯示
-            "c": p.color,
-            "invincible": p.is_invincible(),
-            "w_icon": getattr(p, 'weapon_icon', 'default'),
-            "face": getattr(p, 'facing_right', True) # 如果有人物朝向，可加這個
+            "hp": int(p.hp),
+            "s": int(p.score), # Score
+            "sk": p.skin,      # Skin ID (前端根據 ID 決定顏色和貼圖)
+            "iv": 1 if p.is_invincible() else 0, # Invincible status
+            # 不傳送 max_hp, name, color，這些由前端在 "JOIN" 時紀錄一次即可
         }
     
-    # --- Enemies ---
+    # 壓縮敵人數據
     for eid, e in state["enemies"].items():
-        compressed["enemies"][eid] = {
+        compressed["e"].append({
+            "id": eid,       # 仍需要ID來處理擊中邏輯(如果是前端預測)
             "x": int(e.x),
             "y": int(e.y),
-            "type": e.type,
-            "size": int(e.size),
-            "hp": max(0, int(e.hp)),
-            "max_hp": int(e.max_hp),
-            # 如果敵人有旋轉 (如 Boss)，這裡可以加 angle
-        }
+            "t": e.type,     # Type
+            "hp": int(e.hp),
+            "s": int(e.size) # Size (動態變化的話需要傳，否則可省略)
+        })
         
-    # --- Bullets ---
+    # 壓縮子彈數據 (流量大戶，盡量精簡)
     for b in state["bullets"]:
         bullet_data = {
             "x": int(b.x),
             "y": int(b.y),
-            "owner": getattr(b, 'owner_type', 'enemy'),
-            "c": getattr(b, 'color', '#FFF'),
+            "t": 1 if b.owner_type == "player" else 0, # 1=玩家子彈, 0=怪物子彈
             "s": int(b.size)
         }
-        # 如果子彈有角度 (例如長條形雷射或指向性子彈)，前端需要知道角度來旋轉圖片
-        if hasattr(b, 'angle'):
-             bullet_data["a"] = int(b.angle) # "a" for angle, save bytes
-             
-        compressed["bullets"].append(bullet_data)
+        # 只有特殊子彈才傳顏色，預設子彈前端自己畫
+        if hasattr(b, 'color') and b.color:
+            bullet_data["c"] = b.color
         
-    # --- Items ---
+        compressed["b"].append(bullet_data)
+        
+    # 壓縮道具數據
     for i in state["items"]:
-        compressed["items"].append({
+        compressed["i"].append({
             "x": int(i.x),
             "y": int(i.y),
-            "type": i.item_type
-        })
-
-    # --- Skill Objects ---
-    for s in state["skill_objects"]:
-        # 兼容字典或物件
-        sx = s['x'] if isinstance(s, dict) else s.x
-        sy = s['y'] if isinstance(s, dict) else s.y
-        skin = s['skin'] if isinstance(s, dict) else getattr(s, 'skin', 'default')
-        compressed["skill_objects"].append({
-            "x": int(sx), 
-            "y": int(sy), 
-            "skin": skin
+            "t": i.item_type # 例如 "spread", "heal"
         })
 
     return compressed
