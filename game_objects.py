@@ -1,4 +1,4 @@
-# game_objects.py
+# game_objects.py 5.2
 import random
 import math
 import uuid
@@ -11,6 +11,19 @@ class GameObject:
         self.x = x
         self.y = y
         self.size = size
+        
+class CellWall(GameObject):
+    def __init__(self, x, y, w, h, owner_id):
+        super().__init__(x, y, 0) # size 改用 w, h 控制
+        self.w = w
+        self.h = h
+        self.hp = WALL_CONFIG["hp"]
+        self.max_hp = WALL_CONFIG["hp"]
+        self.owner_id = owner_id
+        self.start_time = time.time()
+
+    def is_expired(self):
+        return (time.time() - self.start_time) > WALL_CONFIG["duration"]
 
 class Item(GameObject):
     def __init__(self, x, y, item_type):
@@ -119,6 +132,8 @@ class Player(GameObject):
         self.score = 0
         self.charge = 0
         self.hit_accumulated = 0
+        self.angle = -90 # 預設向上 (度)
+        self.last_wall_time = 0 # 用於 CD 判定
         
         # 狀態
         self.last_hit_time = 0
@@ -129,6 +144,9 @@ class Player(GameObject):
         self.weapon_level = 0
         self.weapon_type = "default" # default, spread, ricochet, arc
         self.weapon_icon = "🔥" 
+        
+    def can_build_wall(self):
+        return (time.time() - self.last_wall_time) >= WALL_CONFIG["cooldown"]
 
     def is_invincible(self):
         return (time.time() - self.last_hit_time) < INVINCIBLE_TIME
