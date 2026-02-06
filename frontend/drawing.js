@@ -16,7 +16,6 @@ function draw() {
             ctx.shadowColor = color;
             ctx.shadowBlur = 15;
             ctx.fillStyle = color;
-<<<<<<< HEAD
             ctx.beginPath();
             ctx.arc(item.x + 10, item.y + 10, 12, 0, Math.PI * 2);
             ctx.fill();
@@ -95,97 +94,6 @@ function draw() {
         } else {
             // 一般子彈
             ctx.beginPath();
-=======
-            ctx.beginPath();
-            ctx.arc(item.x + 10, item.y + 10, 12, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(item.x + 10, item.y + 10, 5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        });
-    }
-
-    // 2. 繪製技能物件
-    ctx.globalAlpha = 0.6;
-    (gameState.skill_objects || []).forEach(obj => {
-        let img = skins.cells[(obj.skin || 1) - 1];
-        if(img && img.complete) ctx.drawImage(img, obj.x, obj.y, 30, 30);
-    });
-    ctx.globalAlpha = 1.0;
-
-    // 3. 繪製敵人
-    for (let id in gameState.enemies) {
-        let e = gameState.enemies[id];
-        if (e.type === 999) {
-            if(skins.boss.complete) ctx.drawImage(skins.boss, e.x, e.y, e.size, e.size);
-            const hpRatio = Math.max(0, e.hp / e.max_hp);
-            ctx.fillStyle = "#bd93f9"; ctx.fillRect(e.x, e.y-10, e.size * hpRatio, 8);
-        } else {
-            let img = skins.viruses[(e.type || 1) - 1];
-            if(img && img.complete) ctx.drawImage(img, e.x, e.y, e.size, e.size);
-            const hpRatio = Math.max(0, e.hp / e.max_hp);
-            ctx.fillStyle = "#ff5555"; ctx.fillRect(e.x, e.y-6, e.size * hpRatio, 3);
-        }
-    }
-    // 在 draw() 函式內，畫完 Items 後，畫 Players 前加入：
-
-    // 畫牆壁
-    ctx.fillStyle = "#7f8c8d";
-    gameState.walls.forEach(w => {
-        ctx.fillRect(w.x, w.y, w.width, w.height);
-        // 畫血條 (選擇性)
-        ctx.fillStyle = "red";
-        ctx.fillRect(w.x, w.y - 5, w.width * (w.hp / w.max_hp), 3);
-        ctx.fillStyle = "#7f8c8d"; // Reset color
-    });
-
-    // 4. 繪製玩家
-    for (let id in gameState.players) {
-        let p = gameState.players[id];
-        if (p.invincible) ctx.globalAlpha = 0.5;
-        
-        let img = skins.cells[(p.skin || 1) - 1];
-        if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
-        
-        ctx.globalAlpha = 1.0;
-        ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
-        ctx.font = "12px Courier New";
-        let estimatedLives = Math.ceil(p.hp / (p.max_hp / 5)); 
-        ctx.fillText(p.name + " ❤️x" + estimatedLives, p.x, p.y-15);
-
-        let currentLifeHp = p.hp % (p.max_hp / 5);
-        if (currentLifeHp === 0 && p.hp > 0) currentLifeHp = (p.max_hp / 5);
-        let maxLifeHp = (p.max_hp / 5);
-        
-        const hpRatio = Math.max(0, currentLifeHp / maxLifeHp);
-        ctx.fillStyle = "#50fa7b"; 
-        ctx.fillRect(p.x, p.y-10, 30 * hpRatio, 4);
-        ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(p.x, p.y-10, 30, 4);
-    }
-
-    // 5. 繪製子彈
-    gameState.bullets.forEach(b => {
-        // 檢查是否為 Arc 子彈 (紫色 #ff00ff)
-        if (b.c === '#ff00ff' || b.c==='#aa00aa' || b.c === 'rgb(255, 0, 255)') {
-            ctx.save();
-            ctx.translate(b.x, b.y);
-            ctx.rotate(time * 0.008); 
-            
-            ctx.font = "30px sans-serif";
-            ctx.fillStyle = "#ff00ff";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText("🎵", 0, 0); 
-            
-            ctx.restore();
-        } else {
-            // 一般子彈
-            ctx.beginPath();
->>>>>>> cf61c11d6df7b5141882f1c3ab7a2e9f88b1a6d6
             if (b.c) {
                 ctx.fillStyle = b.c;
             } else {
