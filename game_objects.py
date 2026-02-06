@@ -4,6 +4,7 @@ import math
 import uuid
 import time
 from config import *
+from utils import check_collision, get_distance
 
 # 假設 utils 有這些，若無 server.py 會處理碰撞邏輯
 # from utils import check_collision, get_distance 
