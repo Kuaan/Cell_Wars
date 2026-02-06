@@ -1,4 +1,4 @@
-# config.py 5.2
+# config.py 4.0
 import math
 
 # --- 地圖與基礎設定 ---
@@ -14,16 +14,6 @@ CELL_CONFIG = {
     1: {"name": "Soldier", "hp": 5, "speed": 8, "bullet_speed": 7, "damage": 1, "color": "#50fa7b"},
     2: {"name": "Scout", "hp": 3, "speed": 12, "bullet_speed": 10, "damage": 1, "color": "#8be9fd"},
     3: {"name": "Tank", "hp": 8, "speed": 5, "bullet_speed": 6, "damage": 2, "color": "#ff5555"}
-}
-
-# --- 生物牆設定 (Cell Wall) ---
-WALL_CONFIG = {
-    "hp": 100,
-    "duration": 25,     # 存在時間 (s)
-    "cooldown": 20,     # 冷卻時間 (s)
-    "length_mult": 2.5, # 長度倍率 (相對於玩家 size)
-    "thickness": 10,    # 牆體厚度
-    "color": "#ff79c6"  # 牆體顏色 (Pink)
 }
 
 # --- 怪物設定 (Virus) ---
