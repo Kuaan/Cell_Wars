@@ -1,6 +1,12 @@
+<<<<<<< HEAD
 // frontend/main.js
 
 // 圖片載入
+=======
+// frontend/main.js v430
+
+// 圖片載入 (略，保持原樣)
+>>>>>>> cf61c11d6df7b5141882f1c3ab7a2e9f88b1a6d6
 const skins = { cells: [], viruses: [], boss: null };
 function loadImg(path) {
     let img = new Image(); img.src = path;
@@ -18,6 +24,7 @@ const socket = io(SERVER_URL, { reconnection: true });
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+<<<<<<< HEAD
 let gameState = { players: {}, enemies: {}, bullets: [], items: [], skill_objects: [], w: false };
 let myId = null;
 let lastShotTime = 0;
@@ -25,6 +32,17 @@ let lastShotTime = 0;
 socket.on('connect', () => { myId = socket.id; });
 
 // 接收音效指令 (調用 audio.js 裡的 playSfx)
+=======
+// 增加 walls 到狀態
+let gameState = { players: {}, enemies: {}, bullets: [], items: [], skill_objects: [], walls: [], w: false };
+let myId = null;
+let lastShotTime = 0;
+let currentAngle = -90; // 預設向上 (-90度)
+
+socket.on('connect', () => { myId = socket.id; });
+
+// 接收音效指令
+>>>>>>> cf61c11d6df7b5141882f1c3ab7a2e9f88b1a6d6
 socket.on('sfx', (data) => {
     switch(data.type) {
         case 'character_hitted': playSfx('p_hit'); break;
@@ -41,7 +59,11 @@ socket.on('sfx', (data) => {
 // 更新畫面
 socket.on('state_update', (data) => {
     gameState = data;
+<<<<<<< HEAD
     requestAnimationFrame(draw); // draw() 在 drawing.js 定義
+=======
+    requestAnimationFrame(draw); 
+>>>>>>> cf61c11d6df7b5141882f1c3ab7a2e9f88b1a6d6
     updateUI();
 });
 
@@ -69,6 +91,13 @@ function updateUI() {
     if (me.w_icon && fBtn.innerText !== me.w_icon) {
         fBtn.innerText = me.w_icon; 
     }
+<<<<<<< HEAD
+=======
+    
+    // Wall CD 顯示 (選擇性)
+    const wBtn = document.getElementById('build-btn');
+    // 如果後端有傳送 CD 時間最好，這裡暫時不即時顯示 CD 進度條，只做基本按鈕
+>>>>>>> cf61c11d6df7b5141882f1c3ab7a2e9f88b1a6d6
 }
 
 // 搖桿與操作
@@ -82,16 +111,54 @@ const manager = nipplejs.create({
 manager.on('move', (evt, data) => { if(data.vector) socket.emit('move', { dx: data.vector.x, dy: -data.vector.y }); });
 manager.on('end', () => { socket.emit('move', { dx: 0, dy: 0 }); });
 
+<<<<<<< HEAD
+=======
+manager.on('move', (evt, data) => { 
+    if(data.vector) {
+        // 發送移動向量
+        socket.emit('move', { dx: data.vector.x, dy: -data.vector.y });
+        // 紀錄角度 (nipplejs 的 angle.degree 是 0=右, 90=上, 180=左, 270=下)
+        // 但 Canvas 座標系是 Y向下。
+        // data.angle.radian: 0是右, PI/2是上(螢幕上方), PI是左。
+        // 我們需要轉換成 math.atan2(dy, dx) 的格式：
+        // 螢幕座標: dy 負數是向上。
+        // Nipple 輸出的 vector.y 是 "上為正"。
+        // 所以計算角度:
+        const angleRad = Math.atan2(-data.vector.y, data.vector.x);
+        currentAngle = angleRad * (180 / Math.PI); // 轉成度數
+    }
+});
+manager.on('end', () => { socket.emit('move', { dx: 0, dy: 0 }); });
+
+>>>>>>> cf61c11d6df7b5141882f1c3ab7a2e9f88b1a6d6
 function doFire() {
     const now = Date.now();
     if (now - lastShotTime < 150) return;
     lastShotTime = now;
+<<<<<<< HEAD
     socket.emit('shoot');
+=======
+    // 傳送當前角度
+    socket.emit('shoot', { angle: currentAngle });
+>>>>>>> cf61c11d6df7b5141882f1c3ab7a2e9f88b1a6d6
     playSfx('p_shot');
 }
 
 function doSkill() { socket.emit('use_skill'); }
 
+<<<<<<< HEAD
+=======
+// 造牆邏輯
+const buildBtn = document.getElementById('build-btn');
+const startBuild = (e) => { e.preventDefault(); socket.emit('start_build'); buildBtn.style.opacity = 0.5; };
+const stopBuild = (e) => { e.preventDefault(); socket.emit('stop_build'); buildBtn.style.opacity = 1.0; };
+
+buildBtn.addEventListener('touchstart', startBuild);
+buildBtn.addEventListener('touchend', stopBuild);
+buildBtn.addEventListener('mousedown', startBuild);
+buildBtn.addEventListener('mouseup', stopBuild);
+
+>>>>>>> cf61c11d6df7b5141882f1c3ab7a2e9f88b1a6d6
 document.getElementById('fire-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doFire(); });
 document.getElementById('fire-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doFire(); });
 document.getElementById('skill-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doSkill(); });
@@ -100,6 +167,13 @@ document.getElementById('skill-btn').addEventListener('mousedown', (e) => { e.pr
 document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') doFire();
     if (e.key === 'q' || e.key === 'Q') doSkill();
+<<<<<<< HEAD
+=======
+    if (e.key === 'w' || e.key === 'W') socket.emit('start_build'); 
+});
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'w' || e.key === 'W') socket.emit('stop_build');
+>>>>>>> cf61c11d6df7b5141882f1c3ab7a2e9f88b1a6d6
 });
 
 // 開始按鈕
