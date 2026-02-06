@@ -1,146 +1,159 @@
-// frontend/drawing.js
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const time = Date.now();
-    
-    // 1. 繪製道具 (Items)
-    if (gameState.items) {
-        gameState.items.forEach(item => {
-            let color = '#ffffff';
-            if (item.type.includes('spread')) color = '#ffff00';
-            else if (item.type.includes('ricochet')) color = '#00ffff';
-            else if (item.type.includes('arc')) color = '#ff00ff';
-            else if (item.type.includes('heal')) color = '#50fa7b';
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-            ctx.save();
-            ctx.shadowColor = color;
-            ctx.shadowBlur = 15;
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(item.x + 10, item.y + 10, 12, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(item.x + 10, item.y + 10, 5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        });
+// 粒子系統
+let particles = [];
+class Particle {
+    constructor(x, y, color) {
+        this.x = x; this.y = y; this.color = color;
+        this.vx = (Math.random() - 0.5) * 4;
+        this.vy = (Math.random() - 0.5) * 4;
+        this.life = 1.0;
     }
-
-    // 2. 繪製技能物件
-    ctx.globalAlpha = 0.6;
-    (gameState.skill_objects || []).forEach(obj => {
-        let img = skins.cells[(obj.skin || 1) - 1];
-        if(img && img.complete) ctx.drawImage(img, obj.x, obj.y, 30, 30);
-    });
-    ctx.globalAlpha = 1.0;
-
-    // 3. 繪製敵人
-    for (let id in gameState.enemies) {
-        let e = gameState.enemies[id];
-        if (e.type === 999) {
-            if(skins.boss.complete) ctx.drawImage(skins.boss, e.x, e.y, e.size, e.size);
-            const hpRatio = Math.max(0, e.hp / e.max_hp);
-            ctx.fillStyle = "#bd93f9"; ctx.fillRect(e.x, e.y-10, e.size * hpRatio, 8);
-        } else {
-            let img = skins.viruses[(e.type || 1) - 1];
-            if(img && img.complete) ctx.drawImage(img, e.x, e.y, e.size, e.size);
-            const hpRatio = Math.max(0, e.hp / e.max_hp);
-            ctx.fillStyle = "#ff5555"; ctx.fillRect(e.x, e.y-6, e.size * hpRatio, 3);
-        }
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        this.life -= 0.05;
     }
-
-    // 畫牆壁
-    ctx.fillStyle = "#7f8c8d";
-    gameState.walls.forEach(w => {
-        ctx.fillRect(w.x, w.y, w.width, w.height);
-        // 畫血條 (選擇性)
-        ctx.fillStyle = "red";
-        ctx.fillRect(w.x, w.y - 5, w.width * (w.hp / w.max_hp), 3);
-        ctx.fillStyle = "#7f8c8d"; // Reset color
-    });
-
-    // 4. 繪製玩家
-    for (let id in gameState.players) {
-        let p = gameState.players[id];
-        if (p.invincible) ctx.globalAlpha = 0.5;
-        
-        let img = skins.cells[(p.skin || 1) - 1];
-        if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
-        
+    draw(ctx) {
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, 4, 4);
         ctx.globalAlpha = 1.0;
-        ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
-        ctx.font = "12px Courier New";
-        let estimatedLives = Math.ceil(p.hp / (p.max_hp / 5)); 
-        ctx.fillText(p.name + " ❤️x" + estimatedLives, p.x, p.y-15);
+    }
+}
 
-        let currentLifeHp = p.hp % (p.max_hp / 5);
-        if (currentLifeHp === 0 && p.hp > 0) currentLifeHp = (p.max_hp / 5);
-        let maxLifeHp = (p.max_hp / 5);
-        
-        const hpRatio = Math.max(0, currentLifeHp / maxLifeHp);
-        ctx.fillStyle = "#50fa7b"; 
-        ctx.fillRect(p.x, p.y-10, 30 * hpRatio, 4);
-        ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(p.x, p.y-10, 30, 4);
+// 產生爆炸特效
+function spawnExplosion(x, y, color, count=5) {
+    for(let i=0; i<count; i++) particles.push(new Particle(x, y, color));
+}
+
+// 線性插值：讓移動平滑
+function lerp(start, end, t) {
+    return start * (1 - t) + end * t;
+}
+
+// 核心繪圖函式
+function renderGame(state, prevState, alpha, myId) {
+    // 1. 清空畫布
+    ctx.fillStyle = '#0d0211';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 2. 繪製網格背景 (增加速度感)
+    ctx.strokeStyle = '#1a0620';
+    ctx.lineWidth = 1;
+    const offset = (Date.now() / 50) % 40;
+    for (let i = 0; i < canvas.width; i += 40) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+    }
+    for (let i = 0; i < canvas.height; i += 40) {
+        ctx.beginPath(); ctx.moveTo(0, i + offset); ctx.lineTo(canvas.width, i + offset); ctx.stroke();
     }
 
-    // 5. 繪製子彈
-    gameState.bullets.forEach(b => {
-        // 檢查是否為 Arc 子彈 (紫色 #ff00ff)
-        if (b.c === '#ff00ff' || b.c==='#aa00aa' || b.c === 'rgb(255, 0, 255)') {
-            ctx.save();
-            ctx.translate(b.x, b.y);
-            ctx.rotate(time * 0.008); 
-            
-            ctx.font = "30px sans-serif";
-            ctx.fillStyle = "#ff00ff";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText("🎵", 0, 0); 
-            
-            ctx.restore();
-        } else {
-            // 一般子彈
-            ctx.beginPath();
-            if (b.c) {
-                ctx.fillStyle = b.c;
-            } else {
-                if (b.owner === 'boss') ctx.fillStyle = '#bd93f9';
-                else if (b.owner === 'enemy') ctx.fillStyle = '#ff5555';
-                else ctx.fillStyle = (b.owner === myId) ? '#f1fa8c' : '#8be9fd';
-            }
-            let size = b.s || 4;
-            ctx.arc(b.x, b.y, size, 0, Math.PI*2);
-            ctx.fill();
-        }
+    if (!state) return;
+
+    // 3. 繪製道具
+    state.i.forEach(item => {
+        ctx.fillStyle = item.t === 'heal' ? '#ff5555' : '#f1fa8c';
+        ctx.beginPath();
+        ctx.arc(item.x, item.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Arial';
+        ctx.fillText("?", item.x-3, item.y+3);
     });
 
-    // 6. 警告閃爍
-    if (gameState.w) {
+    // 4. 繪製敵人
+    state.e.forEach(enemy => {
+        // 嘗試從舊狀態找對應 ID 做插值
+        let x = enemy.x, y = enemy.y;
+        if (prevState) {
+            const prev = prevState.e.find(e => e.id === enemy.id);
+            if (prev) {
+                x = lerp(prev.x, enemy.x, alpha);
+                y = lerp(prev.y, enemy.y, alpha);
+            }
+        }
+
         ctx.save();
-        const alpha = 0.2 + 0.15 * Math.sin(time * 0.01);
-        ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const scanY = (time * 0.2) % canvas.height;
-        ctx.strokeStyle = "rgba(255, 50, 50, 0.5)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, scanY); ctx.lineTo(canvas.width, scanY);
-        ctx.moveTo(0, canvas.height - scanY); ctx.lineTo(canvas.width, canvas.height - scanY);
-        ctx.stroke();
-        if (Math.floor(time / 250) % 2 === 0) {
-            ctx.translate(canvas.width/2, canvas.height/2);
-            ctx.font = "bold 40px Courier New";
-            ctx.fillStyle = "#ff5555";
-            ctx.textAlign = "center";
-            ctx.shadowColor = "red"; ctx.shadowBlur = 20;
-            ctx.fillText("⚠ WARNING ⚠", 0, -20);
-            ctx.font = "bold 20px Courier New";
-            ctx.fillStyle = "#fff";
-            ctx.fillText("BOSS APPROACHING", 0, 20);
+        ctx.translate(x, y);
+        
+        // 根據類型畫不同圖形
+        if (enemy.t === 999) { // Boss
+            ctx.fillStyle = '#ff5555';
+            ctx.fillRect(0, 0, enemy.s, enemy.s);
+            // Boss 血條
+            ctx.fillStyle = 'red';
+            ctx.fillRect(0, -10, enemy.s, 5);
+            ctx.fillStyle = '#0f0';
+            ctx.fillRect(0, -10, enemy.s * (enemy.hp / 500), 5); // 假設 Boss 500血
+        } else {
+            ctx.fillStyle = enemy.t === 3 ? '#f1fa8c' : (enemy.t === 2 ? '#ff79c6' : '#bd93f9');
+            // 簡單的病毒形狀 (帶刺的圓)
+            ctx.beginPath();
+            ctx.arc(enemy.s/2, enemy.s/2, enemy.s/2, 0, Math.PI*2);
+            ctx.fill();
         }
         ctx.restore();
+    });
+
+    // 5. 繪製玩家
+    Object.keys(state.p).forEach(pid => {
+        const p = state.p[pid];
+        let x = p.x, y = p.y;
+        
+        // 插值
+        if (prevState && prevState.p[pid]) {
+            x = lerp(prevState.p[pid].x, p.x, alpha);
+            y = lerp(prevState.p[pid].y, p.y, alpha);
+        }
+
+        ctx.save();
+        ctx.translate(x, y);
+
+        // 無敵閃爍
+        if (p.iv && Math.floor(Date.now() / 100) % 2 === 0) ctx.globalAlpha = 0.5;
+
+        // 玩家本體
+        ctx.fillStyle = pid === myId ? '#50fa7b' : '#6272a4';
+        ctx.beginPath();
+        ctx.arc(15, 15, 15, 0, Math.PI*2); // 半徑15
+        ctx.fill();
+
+        // 名字
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Courier';
+        ctx.fillText(pid === myId ? "YOU" : "P" + pid.substr(0,2), 5, -5);
+
+        // 血條
+        ctx.fillStyle = '#444';
+        ctx.fillRect(0, 35, 30, 4);
+        ctx.fillStyle = '#ff5555';
+        ctx.fillRect(0, 35, 30 * (p.hp / (p.hp+2)), 4); // 粗略估算比例
+
+        ctx.restore();
+    });
+
+    // 6. 繪製子彈
+    state.b.forEach(b => {
+        // 子彈速度快，通常不做插值，直接畫最新位置以免視覺延遲感
+        ctx.fillStyle = b.c || (b.t === 1 ? '#ffff00' : '#ff5555');
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.s, 0, Math.PI*2);
+        ctx.fill();
+    });
+
+    // 7. 更新與繪製粒子
+    particles = particles.filter(p => p.life > 0);
+    particles.forEach(p => { p.update(); p.draw(ctx); });
+
+    // 8. 警告層
+    if (state.w) { // warning_active
+        if (Math.floor(Date.now() / 500) % 2 === 0) {
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'red';
+            ctx.font = '30px Courier';
+            ctx.fillText("WARNING", canvas.width/2 - 60, canvas.height/2);
+        }
     }
 }
