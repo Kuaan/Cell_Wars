@@ -1,77 +1,76 @@
-class AudioController {
-    constructor() {
-        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-        this.masterGain = this.ctx.createGain();
-        this.masterGain.connect(this.ctx.destination);
-        this.bgmGain = this.ctx.createGain();
-        this.sfxGain = this.ctx.createGain();
-        
-        this.bgmGain.connect(this.masterGain);
-        this.sfxGain.connect(this.masterGain);
-        
-        this.setBgmVolume(0.5);
-        this.setSfxVolume(0.5);
-        this.enabled = false;
-    }
+// frontend/audio.js
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioContext();
 
-    enable() {
-        if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
-        this.enabled = true;
-    }
+const gainNodeBGM = audioCtx.createGain();
+const gainNodeSFX = audioCtx.createGain();
+gainNodeBGM.connect(audioCtx.destination);
+gainNodeSFX.connect(audioCtx.destination);
 
-    setBgmVolume(val) { this.bgmGain.gain.value = val; }
-    setSfxVolume(val) { this.sfxGain.gain.value = val; }
+const audioBuffers = {};
+const bgmSourceNode = { current: null };
 
-    // 播放音調 (頻率, 類型, 持續時間)
-    playTone(freq, type, duration, time = 0) {
-        if (!this.enabled) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime + time);
-        
-        gain.gain.setValueAtTime(this.sfxGain.gain.value, this.ctx.currentTime + time);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + time + duration);
-        
-        osc.connect(gain);
-        gain.connect(this.masterGain);
-        
-        osc.start(this.ctx.currentTime + time);
-        osc.stop(this.ctx.currentTime + time + duration);
-    }
+// 初始音量由 HTML 注入的變數決定
+let volBGM = parseFloat(document.getElementById('vol-bgm').value);
+let volSFX = parseFloat(document.getElementById('vol-sfx').value);
+gainNodeBGM.gain.value = volBGM;
+gainNodeSFX.gain.value = volSFX;
 
-    play(type) {
-        switch (type) {
-            case 'shoot':
-                this.playTone(400, 'square', 0.1);
-                this.playTone(200, 'sawtooth', 0.1, 0.05);
-                break;
-            case 'enemy_hitted':
-                this.playTone(100, 'sawtooth', 0.1);
-                break;
-            case 'character_hitted':
-                this.playTone(150, 'square', 0.3);
-                this.playTone(100, 'square', 0.3, 0.1);
-                break;
-            case 'boss_shot':
-                this.playTone(80, 'sawtooth', 0.3);
-                break;
-            case 'powerup':
-                this.playTone(600, 'sine', 0.1);
-                this.playTone(1200, 'sine', 0.2, 0.1);
-                break;
-            case 'boss_coming':
-                this.playTone(50, 'sawtooth', 1.0);
-                this.playTone(40, 'sawtooth', 1.0, 0.5);
-                break;
-            case 'win':
-                this.playTone(400, 'square', 0.2);
-                this.playTone(600, 'square', 0.2, 0.2);
-                this.playTone(800, 'square', 0.4, 0.4);
-                break;
-        }
-    }
+// SOUNDS_BASE 是全域變數
+const soundList = {
+    bgm: SOUNDS_BASE + "bgm/bgm-145a.wav",
+    p_hit: SOUNDS_BASE + "characters/character_hitted.wav",
+    p_shot: SOUNDS_BASE + "characters/character_nor_shot.wav",
+    boss_come: SOUNDS_BASE + "enemy/boss_coming.wav",
+    boss_hit: SOUNDS_BASE + "enemy/boss_hitted.wav",
+    boss_shot: SOUNDS_BASE + "enemy/boss_shot.wav",
+    e_hit: SOUNDS_BASE + "enemy/enemy_hitted.wav",
+    e_shot: SOUNDS_BASE + "enemy/enemy_nor_shot.wav",
+    skill: SOUNDS_BASE + "skill/slime.wav",
+    powerup: SOUNDS_BASE + "skill/slime.wav" 
+};
+
+async function loadSound(key, url) {
+    try {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        audioBuffers[key] = decodedBuffer;
+    } catch(e) { console.error(`Error loading ${key}:`, e); }
 }
+
+// 載入所有音效
+Promise.all(Object.keys(soundList).map(key => loadSound(key, soundList[key]))).then(() => {
+    const btn = document.getElementById('start-btn');
+    btn.innerText = "進入戰場";
+    btn.disabled = false;
+});
+
+function playSfx(key) {
+    if (volSFX <= 0.01 || !audioBuffers[key]) return;
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffers[key];
+    source.connect(gainNodeSFX);
+    source.start(0);
+}
+
+function playBGM() {
+    if (!audioBuffers['bgm']) return;
+    if (bgmSourceNode.current) { try { bgmSourceNode.current.stop(); } catch(e) {} }
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffers['bgm'];
+    source.loop = true;
+    source.connect(gainNodeBGM);
+    source.start(0);
+    bgmSourceNode.current = source;
+}
+
+document.getElementById('vol-bgm').oninput = function() {
+    volBGM = parseFloat(this.value);
+    gainNodeBGM.gain.setTargetAtTime(volBGM, audioCtx.currentTime, 0.1);
+    if (volBGM > 0 && audioCtx.state === 'suspended') audioCtx.resume();
+};
+document.getElementById('vol-sfx').oninput = function() {
+    volSFX = parseFloat(this.value);
+    gainNodeSFX.gain.setTargetAtTime(volSFX, audioCtx.currentTime, 0.1);
+};

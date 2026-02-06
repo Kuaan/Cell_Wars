@@ -10,142 +10,125 @@ class GameObject:
     def __init__(self, x, y, size):
         self.x = x
         self.y = y
-        self.size = size # 視為直徑
-        self.radius = size / 2
+        self.size = size
 
 class Item(GameObject):
     def __init__(self, x, y, item_type):
-        super().__init__(x, y, 20) 
+        super().__init__(x, y, 20) # 膠囊大小
         self.id = str(uuid.uuid4())
         self.item_type = item_type # 'spread', 'ricochet', 'arc', 'heal'
-        self.dy = 1.5 # 稍微慢一點，比較好接
+        self.dy = 2 # 道具緩慢下落
         
     def update(self):
         self.y += self.dy
         return -50 <= self.y <= MAP_HEIGHT + 50
 
 class Bullet(GameObject):
-    def __init__(self, x, y, owner_id, owner_type, config, angle_deg, size=5):
+    def __init__(self, x, y, owner_id, owner_type, config, angle_deg=None):
+        size = config.get("size", 5)
         super().__init__(x, y, size)
         self.owner_id = owner_id
-        self.owner_type = owner_type
-        
-        # 戰鬥屬性
+        self.owner_type = owner_type # 'player', 'enemy', 'boss'
         self.damage = config.get("damage", 1)
         self.color = config.get("color", None)
-        self.b_type = config.get("type", "linear")
-        self.speed = config.get("speed", 10)
+        self.config = config
         
-        # 運動向量
-        angle_rad = math.radians(angle_deg)
+        # 運動邏輯
+        self.speed = config.get("speed", 10)
+        self.b_type = config.get("type", "linear")
+        
+        # 計算向量
+        angle_rad = math.radians(angle_deg if angle_deg is not None else -90)
         self.dx = math.cos(angle_rad) * self.speed
         self.dy = math.sin(angle_rad) * self.speed
         
-        # 彈射/特殊邏輯
+        # 特殊屬性
         self.bounce_left = config.get("bounce", 0)
         self.bounce_damage_mult = config.get("bounce_damage", 0.3)
-        self.range_limit = config.get("range", 2000)
+        self.range_limit = config.get("range", 9999)
         self.dist_traveled = 0
-        self.ignore_list = [] # 避免連續命中同一敵人
-
-        # 弧射邏輯
+        self.ignore_list = [] # 彈射時避免重複打同一隻
+        
+        # 弧射參數
         if self.b_type == "arc":
-            self.curve_factor = random.choice([-0.2, 0.2]) # 左右隨機偏轉
-            self.curve_timer = 0
+            self.arc_angle = 0
+            self.curve_dir = random.choice([-1, 1])
 
     def update(self):
-        # 弧射：非線性移動
+        # 移動
         if self.b_type == "arc":
-            self.x += self.dx + (math.sin(self.curve_timer) * 5)
+            # 弧形運動：在原向量基礎上疊加切線運動
+            self.x += self.dx + (math.cos(time.time() * 5) * 5 * self.curve_dir)
             self.y += self.dy
-            self.curve_timer += self.curve_factor
         else:
             self.x += self.dx
             self.y += self.dy
             
         self.dist_traveled += self.speed
         
-        # 射程檢查
-        if self.dist_traveled > self.range_limit:
-            return False
-
-        # 邊界檢查 (彈射子彈遇到牆壁反彈)
+        # 邊界反彈 (彈射屬性)
         if self.b_type == "bounce" and self.bounce_left > 0:
             hit_wall = False
             if self.x <= 0 or self.x >= MAP_WIDTH:
                 self.dx *= -1
                 hit_wall = True
-            elif self.y <= 0:
+            if self.y <= 0: # 頂部
                 self.dy *= -1
                 hit_wall = True
             
             if hit_wall:
                 self.bounce_left -= 1
-                return True
+                return True # 活著
+                
+        # 射程限制
+        if self.dist_traveled > self.range_limit:
+            return False
 
-        # 一般子彈出界檢查
+        # 一般邊界檢查
         return -50 <= self.x <= MAP_WIDTH + 50 and -50 <= self.y <= MAP_HEIGHT + 50
 
-    def ricochet(self, current_target_id, all_enemies):
-        """
-        彈射邏輯：擊中後尋找最近的另一個敵人轉向
-        """
-        if self.b_type != "bounce" or self.bounce_left <= 0:
-            return False # 消失
-
-        self.damage *= self.bounce_damage_mult
-        self.bounce_left -= 1
-        self.ignore_list.append(current_target_id)
-
-        # 尋找最近且未打過的敵人
-        closest_enemy = None
-        min_dist = 500 # 搜索半徑
-        
-        for eid, enemy in all_enemies.items():
-            if eid in self.ignore_list: continue
-            dist = get_distance(self.x, self.y, enemy.x, enemy.y)
-            if dist < min_dist:
-                min_dist = dist
-                closest_enemy = enemy
-        
-        if closest_enemy:
-            # 計算指向新敵人的向量
-            dx = closest_enemy.x - self.x
-            dy = closest_enemy.y - self.y
-            length = math.sqrt(dx**2 + dy**2)
-            if length > 0:
-                self.dx = (dx / length) * self.speed
-                self.dy = (dy / length) * self.speed
-            return True # 繼續飛行
-        else:
-            # 沒敵人了，隨機反彈飛走
-            self.dx = -self.dx + random.uniform(-2, 2)
-            self.dy = -self.dy
+    def handle_hit(self, target):
+        """處理命中後的邏輯 (回傳 False 代表子彈消失, True 代表子彈繼續)"""
+        if self.b_type == "bounce" and self.bounce_left > 0:
+            self.damage *= self.bounce_damage_mult
+            self.bounce_left -= 1
+            self.ignore_list.append(target) # 短時間不打同一隻
+            
+            # 尋找最近的其他目標 (簡單的反彈邏輯：直接反轉或是隨機偏轉)
+            # 這裡做簡單物理反彈：假設撞到圓形切線
+            self.dx *= -1 
+            self.dy *= -1 
+            # 為了避免黏在敵人身上，稍微推開
+            self.x += self.dx * 2
+            self.y += self.dy * 2
             return True
+        return False
 
 class Player(GameObject):
     def __init__(self, sid, name, skin_id):
         stats = CELL_CONFIG[skin_id]
-        super().__init__(random.randint(100, MAP_WIDTH-100), MAP_HEIGHT - 100, stats["radius"]*2)
+        super().__init__(random.randint(100, 500), 400, 30)
         self.sid = sid
         self.name = name
         self.skin = skin_id
         self.stats = stats
-        
-        # 生命系統
+        self.hp = stats["hp"] * PLAYER_LIVES # 5條命總血量
+        self.max_hp = stats["hp"] * PLAYER_LIVES
         self.lives_count = PLAYER_LIVES
-        self.hp = stats["hp"] 
-        self.max_hp = stats["hp"]
-        
+        self.color = stats["color"]
         self.score = 0
-        self.charge = 0 # 技能充能
+        self.charge = 0
+        self.hit_accumulated = 0
         
         # 狀態
         self.last_hit_time = 0
         self.last_shot_time = 0
+        self.last_skill_time = 0
         
-        # 武器系統
-        self.reset_weapon()
+        # 武器狀態
+        self.weapon_level = 0
+        self.weapon_type = "default" # default, spread, ricochet, arc
+        self.weapon_icon = "🔥" 
 
     def is_invincible(self):
         return (time.time() - self.last_hit_time) < INVINCIBLE_TIME
@@ -155,26 +138,25 @@ class Player(GameObject):
         self.hp -= amount
         self.last_hit_time = time.time()
         
+        # 死亡判定 (扣命模擬)
+        unit_hp = self.stats["hp"]
+        current_lives = math.ceil(self.hp / unit_hp)
+        
         if self.hp <= 0:
-            self.lives_count -= 1
-            if self.lives_count > 0:
-                self.respawn(soft=True)
-            else:
-                self.respawn(soft=False) # Game Over logic handled by server usually, but here reset
+            self.respawn()
+        elif current_lives < self.lives_count:
+             # 掉了一條命但還沒死透，重置武器
+             self.reset_weapon()
+             self.lives_count = current_lives
         return True
 
-    def respawn(self, soft=False):
-        self.x, self.y = random.randint(100, MAP_WIDTH-100), MAP_HEIGHT - 100
+    def respawn(self):
+        self.x, self.y = random.randint(100, 500), 400
         self.hp = self.max_hp
-        self.last_hit_time = time.time() + 1 # 額外無敵時間
-        if not soft:
-            # 徹底死亡重置
-            self.score = int(self.score / 2)
-            self.lives_count = PLAYER_LIVES
-            self.reset_weapon()
-        else:
-            # 掉一條命，武器降級或重置
-            self.weapon_level = max(0, self.weapon_level - 1)
+        self.lives_count = PLAYER_LIVES
+        self.score = int(self.score / 2)
+        self.charge = 0
+        self.reset_weapon()
 
     def reset_weapon(self):
         self.weapon_type = "default"
@@ -182,69 +164,32 @@ class Player(GameObject):
         self.weapon_icon = "🔥"
 
     def apply_item(self, item_type):
-        if item_type == "heal":
-            self.hp = min(self.max_hp, self.hp + 2)
-            return
-
-        base_type = item_type.split('_')[0]
-        if self.weapon_type == base_type:
+        # 簡單狀態機
+        base_type = item_type.split('_')[0] # spread, ricochet...
+        
+        if self.weapon_type.startswith(base_type):
+            # 同類別，升級
             self.weapon_level = min(2, self.weapon_level + 1)
         else:
+            # 不同類別，覆蓋且 Lv1
             self.weapon_type = base_type
             self.weapon_level = 1
             
+        # 更新 Icon
         icons = {"spread": "🔱", "ricochet": "⚡", "arc": "🌙", "default": "🔥"}
         self.weapon_icon = icons.get(base_type, "🔥")
 
-    def shoot(self):
-        """產生子彈物件列表"""
-        current_time = time.time()
-        config = self._get_weapon_config()
-        
-        # 射速限制
-        fire_rate = FIRE_COOLDOWN * config.get("fire_rate_mult", 1.0)
-        if current_time - self.last_shot_time < fire_rate:
-            return []
-            
-        self.last_shot_time = current_time
-        bullets = []
-        
-        # 根據 Config 的 angles 生成子彈
-        angles = config.get("angles", [-90])
-        
-        # 處理 "random" 角度 (Arc 武器)
-        if angles == "random":
-             angles = [random.uniform(-110, -70)]
-
-        for angle in angles:
-            # Arc 武器可以有隨機擴散
-            if isinstance(angle, str): continue 
-            
-            b = Bullet(
-                self.x, self.y - 10, 
-                self.sid, "player", 
-                config, angle, 
-                size=config.get("size", 5)
-            )
-            bullets.append(b)
-            
-        return bullets
-
-    def _get_weapon_config(self):
+    def get_shoot_config(self):
+        # 根據當前狀態回傳子彈設定
         key = "default"
         if self.weapon_type != "default":
             key = f"{self.weapon_type}_lv{self.weapon_level}"
-        # 確保 key 存在，不存在回退 default
         return WEAPON_CONFIG.get(key, WEAPON_CONFIG["default"])
 
 class Enemy(GameObject):
     def __init__(self, type_id):
         stats = VIRUS_CONFIG[type_id]
-        # Boss (999) 生成在上方中間，一般怪隨機
-        start_x = MAP_WIDTH / 2 if type_id == 999 else random.randint(50, MAP_WIDTH - 50)
-        start_y = -100
-        
-        super().__init__(start_x, start_y, stats["size"])
+        super().__init__(random.randint(0, MAP_WIDTH - stats["size"]), random.randint(-100, 0), stats["size"])
         self.id = str(uuid.uuid4())
         self.type = type_id
         self.hp = stats["hp"]
@@ -252,31 +197,19 @@ class Enemy(GameObject):
         self.speed = stats["speed"]
         self.score = stats["score"]
         self.prob_drop = stats["drop_rate"]
-        
-        # 移動 AI 參數
         self.move_timer = 0
-        self.patrol_dir = 1 # 1: Right, -1: Left
-
-    def update(self):
-        # Boss 行為
-        if self.type == 999:
-            # 進場
-            if self.y < 80:
-                self.y += 1
-            else:
-                # 左右巡邏
-                self.x += self.speed * self.patrol_dir
-                if self.x > MAP_WIDTH - 150 or self.x < 150:
-                    self.patrol_dir *= -1
-            return True # Boss 不會自行走出邊界消失
-
-        # 一般怪行為
-        self.y += self.speed
+        self.dx = 0
+        self.dy = 0
         
-        # 稍微左右搖擺，增加動感
-        self.x += math.sin(self.y * 0.02) * 2
-
-        # 邊界檢查
-        if self.y > MAP_HEIGHT + 50:
-            return False # 移除
-        return True
+    def update(self):
+        # 簡單 AI 移動邏輯 (Boss 會有 Server 端額外控制，這裡處理基本移動)
+        if self.type == 999: # Boss
+            pass # 由 Server 主控
+        else:
+            self.y += self.speed * 0.5
+            self.move_timer += 1
+            if self.move_timer > 30:
+                self.x += random.choice([-20, 20, 0])
+                self.move_timer = 0
+            self.x = max(0, min(MAP_WIDTH - self.size, self.x))
+            if self.y > MAP_HEIGHT: self.y = -50
