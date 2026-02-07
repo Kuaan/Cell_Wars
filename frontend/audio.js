@@ -1,4 +1,4 @@
-// frontend/audio.js
+// frontend/audio.js v5.0
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const audioCtx = new AudioContext();
 
