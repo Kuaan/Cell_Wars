@@ -35,30 +35,92 @@ function draw() {
     });
     ctx.globalAlpha = 1.0;
 
-    // 3. 繪製敵人
+    // 3. 繪製敵人 (增加旋轉邏輯：面向最近的玩家)
     for (let id in gameState.enemies) {
         let e = gameState.enemies[id];
+        let centerX = e.x + e.size / 2;
+        let centerY = e.y + e.size / 2;
+
+        // 尋找最近的玩家來決定面向
+        let targetAngle = 0; // 預設
+        let minDist = 9999;
+        let closestPlayer = null;
+        
+        for (let pid in gameState.players) {
+            let p = gameState.players[pid];
+            let dist = Math.hypot(p.x - e.x, p.y - e.y);
+            if (dist < minDist) {
+                minDist = dist;
+                closestPlayer = p;
+            }
+        }
+
+        if (closestPlayer) {
+            targetAngle = Math.atan2(closestPlayer.y - e.y, closestPlayer.x - e.x);
+        } else {
+            targetAngle = Math.PI / 2; // 若無玩家，面向下
+        }
+        // 修正圖片預設方向 (假設圖片原本朝上 -PI/2，需要轉正)
+        // 根據你的素材，通常 0 是右，PI/2 是下。這裡假設素材頭部朝上。
+        let rotation = targetAngle + Math.PI / 2; 
+
         if (e.type === 999) {
+            // Boss
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            // Boss 不一定需要旋轉，看設計，這裡先不轉 Boss 避免看起來奇怪
+            // ctx.rotate(rotation); 
+            ctx.translate(-centerX, -centerY);
             if(skins.boss.complete) ctx.drawImage(skins.boss, e.x, e.y, e.size, e.size);
+            ctx.restore();
+
             const hpRatio = Math.max(0, e.hp / e.max_hp);
             ctx.fillStyle = "#bd93f9"; ctx.fillRect(e.x, e.y-10, e.size * hpRatio, 8);
         } else {
+            // 一般病毒
             let img = skins.viruses[(e.type || 1) - 1];
-            if(img && img.complete) ctx.drawImage(img, e.x, e.y, e.size, e.size);
+            
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(rotation); 
+            // 繪製圖片 (以中心點為準)
+            if(img && img.complete) ctx.drawImage(img, -e.size/2, -e.size/2, e.size, e.size);
+            ctx.restore();
+
+            // 血條不跟著旋轉
             const hpRatio = Math.max(0, e.hp / e.max_hp);
             ctx.fillStyle = "#ff5555"; ctx.fillRect(e.x, e.y-6, e.size * hpRatio, 3);
         }
     }
 
-    // 4. 繪製玩家
+    // 4. 繪製玩家 (增加旋轉邏輯)
     for (let id in gameState.players) {
         let p = gameState.players[id];
+        let size = 30;
+        let centerX = p.x + size / 2;
+        let centerY = p.y + size / 2;
+
         if (p.invincible) ctx.globalAlpha = 0.5;
         
         let img = skins.cells[(p.skin || 1) - 1];
-        if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
+        
+        // 計算旋轉：如果有 p.angle (來自後端) 則用，否則如果是自己，用 currentAngle
+        let rotation = 0;
+        if (id === myId) {
+            rotation = currentAngle + Math.PI / 2; // 修正素材預設朝上的偏移
+        } else if (p.angle !== undefined) {
+            rotation = p.angle + Math.PI / 2;
+        }
+
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rotation);
+        if(img && img.complete) ctx.drawImage(img, -size/2, -size/2, size, size);
+        ctx.restore();
         
         ctx.globalAlpha = 1.0;
+        
+        // UI 文字與血條 (不旋轉)
         ctx.fillStyle = (id === myId) ? "#f1fa8c" : "white";
         ctx.font = "12px Courier New";
         let estimatedLives = Math.ceil(p.hp / (p.max_hp / 5)); 
