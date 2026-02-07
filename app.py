@@ -9,13 +9,12 @@ ASSETS_BASE = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/ma
 SOUNDS_BASE = f"{ASSETS_BASE}sounds/"
 SERVER_URL = "https://cell-wars.onrender.com"
 
-# 預設音量
 DEFAULT_VOL_BGM = 0.4
 DEFAULT_VOL_SFX = 0.6
 
 st.set_page_config(page_title="Cell Wars V5.1", layout="wide")
 
-# 隱藏 Streamlit 原生介面
+# 隱藏 Streamlit 原生介面 (保留在 Python 端處理)
 st.markdown("""
     <style>
     [data-testid="stHeader"] {display: none;}
@@ -27,9 +26,6 @@ st.markdown("""
 def load_file(filename):
     """讀取 frontend 資料夾下的檔案內容"""
     file_path = os.path.join("frontend", filename)
-    # 確保檔案存在，避免報錯
-    if not os.path.exists(file_path):
-        return f"/* Error: {filename} not found */"
     with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -40,7 +36,7 @@ audio_logic = load_file("audio.js")
 drawing_logic = load_file("drawing.js")
 main_logic = load_file("main.js")
 
-# 2. 變數替換 (Injection)
+# 2. 變數替換 (Injection)# 使用 replace 而不是 format，避免與 JS 內的 { } 衝突
 rendered_html = html_template
 rendered_html = rendered_html.replace("{style}", css_code)
 rendered_html = rendered_html.replace("{audio_js}", audio_logic)
