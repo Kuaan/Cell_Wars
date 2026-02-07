@@ -21,10 +21,11 @@ const ctx = canvas.getContext('2d');
 let gameState = { players: {}, enemies: {}, bullets: [], items: [], skill_objects: [], w: false };
 let myId = null;
 let lastShotTime = 0;
+let currentAngle = -Math.PI / 2; // 預設朝上
 
 socket.on('connect', () => { myId = socket.id; });
 
-// 接收音效指令 (調用 audio.js 裡的 playSfx)
+// 接收音效指令
 socket.on('sfx', (data) => {
     switch(data.type) {
         case 'character_hitted': playSfx('p_hit'); break;
@@ -41,7 +42,7 @@ socket.on('sfx', (data) => {
 // 更新畫面
 socket.on('state_update', (data) => {
     gameState = data;
-    requestAnimationFrame(draw); // draw() 在 drawing.js 定義
+    requestAnimationFrame(draw); 
     updateUI();
 });
 
@@ -79,18 +80,43 @@ const manager = nipplejs.create({
     size: 100,
     color: 'white'
 });
-manager.on('move', (evt, data) => { if(data.vector) socket.emit('move', { dx: data.vector.x, dy: -data.vector.y }); });
-manager.on('end', () => { socket.emit('move', { dx: 0, dy: 0 }); });
+
+manager.on('move', (evt, data) => { 
+    if(data.vector) {
+        // NippleJS vector y 是向上的為正，但在 Canvas 座標系 y 向下為正，所以這裡 dy 要取負
+        let dx = data.vector.x;
+        let dy = -data.vector.y; 
+        
+        // 計算角度 (radians)
+        currentAngle = Math.atan2(dy, dx);
+
+        socket.emit('move', { 
+            dx: dx, 
+            dy: dy,
+            angle: currentAngle // 傳送角度給後端 (若後端支援)
+        }); 
+    }
+});
+
+manager.on('end', () => { 
+    // 停止移動，但不重置 currentAngle，這樣角色會停留在最後面向的角度
+    socket.emit('move', { dx: 0, dy: 0, angle: currentAngle }); 
+});
 
 function doFire() {
     const now = Date.now();
     if (now - lastShotTime < 150) return;
     lastShotTime = now;
-    socket.emit('shoot');
+    
+    // 發送射擊指令，帶上當前的角度
+    socket.emit('shoot', { angle: currentAngle });
     playSfx('p_shot');
 }
 
-function doSkill() { socket.emit('use_skill'); }
+function doSkill() { 
+    // 技能也帶上方向
+    socket.emit('use_skill', { angle: currentAngle }); 
+}
 
 document.getElementById('fire-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doFire(); });
 document.getElementById('fire-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doFire(); });
