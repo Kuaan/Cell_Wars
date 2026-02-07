@@ -1,4 +1,4 @@
-// frontend/main.js
+// frontend/main.js v5.0
 
 // 圖片載入
 const skins = { cells: [], viruses: [], boss: null };
