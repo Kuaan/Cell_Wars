@@ -72,6 +72,8 @@ function updateUI() {
 }
 
 // 搖桿與操作
+let currentAimAngle = -90; // 預設向上
+
 const manager = nipplejs.create({
     zone: document.getElementById('joystick-zone'),
     mode: 'static',
@@ -79,14 +81,32 @@ const manager = nipplejs.create({
     size: 100,
     color: 'white'
 });
-manager.on('move', (evt, data) => { if(data.vector) socket.emit('move', { dx: data.vector.x, dy: -data.vector.y }); });
-manager.on('end', () => { socket.emit('move', { dx: 0, dy: 0 }); });
+
+manager.on('move', (evt, data) => { 
+    if(data.vector) {
+        // NippleJS 的 vector.y 向上是正，但 Canvas 座標向下是正，所以 dy 取負
+        socket.emit('move', { dx: data.vector.x, dy: -data.vector.y });
+        
+        // 計算角度 (Degree)
+        // Math.atan2(y, x) 回傳弧度，轉換為角度
+        // 注意：這裡我們用 -data.vector.y 來符合螢幕座標系 (上為負)
+        const angleRad = Math.atan2(-data.vector.y, data.vector.x);
+        currentAimAngle = angleRad * (180 / Math.PI);
+    }
+});
+
+manager.on('end', () => { 
+    socket.emit('move', { dx: 0, dy: 0 }); 
+    // 不重置 currentAimAngle，這樣玩家停下來時還能朝最後方向射擊
+});
 
 function doFire() {
     const now = Date.now();
     if (now - lastShotTime < 150) return;
     lastShotTime = now;
-    socket.emit('shoot');
+    
+    // 發送射擊指令，帶上角度
+    socket.emit('shoot', { angle: currentAimAngle });
     playSfx('p_shot');
 }
 
