@@ -1,4 +1,4 @@
-#<<<<<<<<<<<<<<<<<<<<<<<<4.3 server.py
+#<<<<<<<<<<<<<<<<<<<<<<<<4.3.1 server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -124,7 +124,6 @@ class Bullet(GameObject):
             self.curve_dir = random.choice([-1, 1])
 
     def update(self):
-        # 移動
         if self.b_type == "arc":
             # 弧形運動：在原向量基礎上疊加切線運動
             self.x += self.dx + (math.cos(time.time() * 5) * 5 * self.curve_dir)
@@ -138,16 +137,30 @@ class Bullet(GameObject):
         # 邊界反彈 (彈射屬性)
         if self.b_type == "bounce" and self.bounce_left > 0:
             hit_wall = False
-            if self.x <= 0 or self.x >= MAP_WIDTH:
+            
+            # X 軸邊界檢查
+            if self.x <= 0:
+                self.x = 0             # 強制推回邊界內 (防黏牆)
+                self.dx *= -1          # 反轉 X 速度
+                hit_wall = True
+            elif self.x >= MAP_WIDTH:
+                self.x = MAP_WIDTH     # 強制推回邊界內
                 self.dx *= -1
                 hit_wall = True
-            if self.y <= 0: # 頂部
+            
+            # Y 軸邊界檢查 (修正：補上 MAP_HEIGHT 判定)
+            if self.y <= 0:
+                self.y = 0             # 強制推回
+                self.dy *= -1          # 反轉 Y 速度
+                hit_wall = True
+            elif self.y >= MAP_HEIGHT: # 新增：底部邊界判定
+                self.y = MAP_HEIGHT    # 強制推回
                 self.dy *= -1
                 hit_wall = True
             
             if hit_wall:
                 self.bounce_left -= 1
-                return True # 活著
+                return True # 成功反彈，保持存活
                 
         # 射程限制
         if self.dist_traveled > self.range_limit:
