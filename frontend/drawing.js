@@ -1,4 +1,4 @@
-// frontend/drawing.js
+// frontend/drawing.js v5.0
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const time = Date.now();
