@@ -1,4 +1,4 @@
-#<<<<<<<<<<<<<<<<<<<<<<<<<server_config.py V4.2
+#<<<<<<<<<<<<<<<<<<<<<<<<<server_config.py v5.0
 import math
 # --- 地圖與基礎設定 ---
 MAP_WIDTH = 600
