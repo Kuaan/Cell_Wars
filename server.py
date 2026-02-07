@@ -1,4 +1,4 @@
-#<<<<<<<<<<<<<<<<<<<<<<<<4.2 server.py
+#<<<<<<<<<<<<<<<<<<<<<<<<4.3 server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -499,16 +499,35 @@ async def game_loop():
                             player.take_damage(1)
                             sfx_buffer.append({'type': 'character_hitted'})
                 
-                # 普通怪物射擊
+                # 普通怪物射擊 (優化版：瞄準最近玩家)
                 atk = VIRUS_CONFIG[enemy.type]['attack']
                 if random.random() < atk['fire_rate']:
                     cx, cy = enemy.x + enemy.size/2, enemy.y + enemy.size
+                    
+                    # 尋找最近的玩家
+                    target = None
+                    min_dist = 9999
+                    for p in gs.players.values():
+                        d = get_distance(enemy, p)
+                        if d < min_dist:
+                            min_dist = d
+                            target = p
+                    
+                    # 計算射擊角度
+                    angle_deg = 90 # 預設向下
+                    if target:
+                        # 計算指向玩家的向量角度
+                        dx = (target.x + 15) - cx
+                        dy = (target.y + 15) - cy
+                        angle_rad = math.atan2(dy, dx)
+                        angle_deg = math.degrees(angle_rad)
+
                     bullets_pos = [{"x": cx-15, "y": cy}, {"x": cx+15, "y": cy}] if atk['mode'] == 'double' else [{"x": cx, "y": cy}]
+                    
                     for pos in bullets_pos:
-                        b = Bullet(pos['x'], pos['y'], eid, "enemy", {"damage": atk['damage'], "speed": atk['bullet_speed']})
-                        # 敵人子彈向下
-                        b.dx, b.dy = 0, atk['bullet_speed']
+                        b = Bullet(pos['x'], pos['y'], eid, "enemy", {"damage": atk['damage'], "speed": atk['bullet_speed']}, angle_deg=angle_deg)
                         gs.bullets.append(b)
+                        sfx_buffer.append({'type': 'enemy_nor_shot'})
 
         # 6. 發送狀態
         state_data = compress_state({
@@ -547,7 +566,7 @@ async def move(sid, data):
         p.y = max(0, min(MAP_HEIGHT - 30, p.y + data.get('dy', 0) * p.stats['speed']))
 
 @sio.event
-async def shoot(sid):
+async def shoot(sid, data=None): # 修改：接收 data 參數
     if sid in gs.players:
         p = gs.players[sid]
         curr = time.time()
@@ -559,14 +578,40 @@ async def shoot(sid):
         if curr - p.last_shot_time < cooldown: return
         p.last_shot_time = curr
 
+        # 決定基礎瞄準角度 (若前端有傳來 angle 則使用，否則預設 -90 向上)
+        base_angle = -90
+        if data and isinstance(data, dict) and 'angle' in data:
+            base_angle = data['angle']
+
         # 產生子彈 (支援散射/特殊發射)
-        angles = w_conf["angles"]
-        if isinstance(angles, list): # 固定角度 (一般/散射)
-            for angle in angles:
-                b = Bullet(p.x + 15, p.y, sid, "player", w_conf, angle_deg=angle)
+        # 邏輯：將武器設定的固定角度視為「相對角度」，加上玩家目前的瞄準角度
+        conf_angles = w_conf["angles"]
+        
+        if isinstance(conf_angles, list): # 固定角度 (一般/散射)
+            # 判斷是否為預設武器(單發)，如果是，直接用瞄準角度
+            # 如果是散射(多發)，我們假設 [-20, -90, -160] 這種設定是相對於 "前方(-90)" 的偏移
+            # 計算偏移量： config_angle - (-90)
+            
+            for conf_angle in conf_angles:
+                # 簡單化處理：如果只有一發且是 -90，直接用 base_angle
+                if len(conf_angles) == 1 and conf_angle == -90:
+                    final_angle = base_angle
+                else:
+                    # 散射邏輯：計算相對偏移。假設 -90 是正前方
+                    offset = conf_angle - (-90) 
+                    final_angle = base_angle + offset
+                
+                # 計算發射位置 (稍微往子彈方向偏移一點，避免重疊在身體裡)
+                rad = math.radians(final_angle)
+                offset_x = math.cos(rad) * 20
+                offset_y = math.sin(rad) * 20
+                
+                b = Bullet(p.x + 15 + offset_x, p.y + 15 + offset_y, sid, "player", w_conf, angle_deg=final_angle)
                 gs.bullets.append(b)
-        elif angles == "random_45_135": # 弧射 (隨機前方)
-            angle = random.uniform(-135, -45) # 上方隨機
+                
+        elif conf_angles == "random_45_135": # 弧射 (特殊技能)
+            # 在瞄準方向左右 45 度內隨機
+            angle = base_angle + random.uniform(-45, 45)
             b = Bullet(p.x + 15, p.y, sid, "player", w_conf, angle_deg=angle)
             gs.bullets.append(b)
 
