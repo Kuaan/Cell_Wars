@@ -1,16 +1,14 @@
-# v4.2.0 app.py (Modular Refactor)
+# v4.2.0 app.py
 import streamlit as st
 import streamlit.components.v1 as components
 import os
 
-# client_config.py
 GITHUB_USER = "Kuaan"
 GITHUB_REPO = "Cell_Wars"
 ASSETS_BASE = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/assets/"
 SOUNDS_BASE = f"{ASSETS_BASE}sounds/"
 SERVER_URL = "https://cell-wars.onrender.com"
 
-# 這裡可以定義初始音量或其他前端參數
 DEFAULT_VOL_BGM = 0.4
 DEFAULT_VOL_SFX = 0.6
 
@@ -38,8 +36,7 @@ audio_logic = load_file("audio.js")
 drawing_logic = load_file("drawing.js")
 main_logic = load_file("main.js")
 
-# 2. 變數替換 (Injection)
-# 使用 replace 而不是 format，避免與 JS 內的 { } 衝突
+# 2. 變數替換 (Injection)# 使用 replace 而不是 format，避免與 JS 內的 { } 衝突
 rendered_html = html_template
 rendered_html = rendered_html.replace("{style}", css_code)
 rendered_html = rendered_html.replace("{audio_js}", audio_logic)
