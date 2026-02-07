@@ -1,62 +1,48 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <title>Cell Wars</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
-    <style>
-        /* CSS 將會注入這裡 */
-        {style} 
-    </style>
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <style>{style}</style>
 </head>
 <body>
-    <div id="login-overlay">
-        <div id="login-box">
-            <h1 style="color: #50fa7b; margin: 0 0 10px 0;">🦠 CELL WARS V5.1</h1>
-            <p style="color: #aaa; font-size: 12px;">Refactored Client</p>
-            <input type="text" id="name-input" placeholder="輸入名稱" maxlength="8">
-            <button id="start-btn" disabled>資源載入中...</button>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui-layer">
+            <div id="score-board">SCORE: <span id="score-val">0</span></div>
+            <div id="hp-bar-container"><div id="hp-bar"></div></div>
+            <div id="connection-status">Connecting...</div>
+            <div id="start-screen">
+                <h1>CELL WARS</h1>
+                <p>Tap to Start</p>
+                <input type="text" id="username" placeholder="Enter Name" maxlength="8">
+                <button id="btn-start">DEPLOY</button>
+            </div>
         </div>
-    </div>
 
-    <div id="top-bar">
-        <div class="vol-control">BGM <input type="range" id="vol-bgm" min="0" max="1" step="0.1" value="{vol_bgm}"></div>
-        <div id="lb-content">...</div>
-        <div class="vol-control">SFX <input type="range" id="vol-sfx" min="0" max="1" step="0.1" value="{vol_sfx}"></div>
-    </div>
-
-    <canvas id="gameCanvas" width="600" height="500"></canvas>
-
-    <div id="ui-container">
         <div id="joystick-zone"></div>
-        <div id="actions-zone">
-            <div id="charge-container">
-                <div class="charge-bar-segment" id="seg1"><div class="charge-fill" id="fill1"></div></div>
-                <div class="charge-bar-segment" id="seg2"><div class="charge-fill" id="fill2"></div></div>
-                <div class="charge-bar-segment" id="seg3"><div class="charge-fill" id="fill3"></div></div>
-            </div>
-            <div style="display:flex; gap:15px; align-items:flex-end;">
-                <div class="btn-skill disabled" id="skill-btn">SKILL</div>
-                <div class="btn-fire" id="fire-btn">🔥</div>
-            </div>
+        
+        <div id="action-zone">
+            <button id="btn-skill" class="action-btn">⚡</button>
+            <button id="btn-fire" class="action-btn">🔥</button>
         </div>
     </div>
 
     <script>
-        // 定義全域常數，讓注入的 JS 檔案可以使用
-        const SERVER_URL = "{server_url}";
+        // 設定全域變數供 JS 使用
         const ASSETS_BASE = "{assets_base}";
         const SOUNDS_BASE = "{sounds_base}";
-        
-        // 依序注入程式碼
-        // 1. 音效邏輯 (定義 audioCtx, playSfx)
-        {audio_js}
-
-        // 2. 繪圖邏輯 (定義 draw)
-        {drawing_js}
-
-        // 3. 主邏輯 (啟動 socket, 監聽事件)
-        {main_js}
+        const SERVER_URL = "{server_url}";
+        const VOL_BGM = {vol_bgm};
+        const VOL_SFX = {vol_sfx};
     </script>
+
+    <script>{audio_js}</script>
+    <script>{drawing_js}</script>
+    <script>{main_js}</script>
 </body>
 </html>
