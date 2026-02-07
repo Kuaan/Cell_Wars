@@ -2,7 +2,17 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import os
-import client_config as cfg  # 匯入我們剛寫的設定檔
+
+# client_config.py
+GITHUB_USER = "Kuaan"
+GITHUB_REPO = "Cell_Wars"
+ASSETS_BASE = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/assets/"
+SOUNDS_BASE = f"{ASSETS_BASE}sounds/"
+SERVER_URL = "https://cell-wars.onrender.com"
+
+# 這裡可以定義初始音量或其他前端參數
+DEFAULT_VOL_BGM = 0.4
+DEFAULT_VOL_SFX = 0.6
 
 st.set_page_config(page_title="Cell Wars V5.1", layout="wide")
 
@@ -35,11 +45,11 @@ rendered_html = rendered_html.replace("{style}", css_code)
 rendered_html = rendered_html.replace("{audio_js}", audio_logic)
 rendered_html = rendered_html.replace("{drawing_js}", drawing_logic)
 rendered_html = rendered_html.replace("{main_js}", main_logic)
-rendered_html = rendered_html.replace("{server_url}", cfg.SERVER_URL)
-rendered_html = rendered_html.replace("{assets_base}", cfg.ASSETS_BASE)
-rendered_html = rendered_html.replace("{sounds_base}", cfg.SOUNDS_BASE)
-rendered_html = rendered_html.replace("{vol_bgm}", str(cfg.DEFAULT_VOL_BGM))
-rendered_html = rendered_html.replace("{vol_sfx}", str(cfg.DEFAULT_VOL_SFX))
+rendered_html = rendered_html.replace("{server_url}", SERVER_URL)
+rendered_html = rendered_html.replace("{assets_base}", ASSETS_BASE)
+rendered_html = rendered_html.replace("{sounds_base}", SOUNDS_BASE)
+rendered_html = rendered_html.replace("{vol_bgm}", str(DEFAULT_VOL_BGM))
+rendered_html = rendered_html.replace("{vol_sfx}", str(DEFAULT_VOL_SFX))
 
 # 3. 渲染
 components.html(rendered_html, height=800)
