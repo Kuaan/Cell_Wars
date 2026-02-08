@@ -1,4 +1,4 @@
-#<<<<<<<<<<<<<<<<<<<<<<<<5.1 server.py
+# <<<<<<<<<<<<<<<<<<<<<<<< 5.1 server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -8,7 +8,32 @@ import time
 import math
 import uuid
 
-from server_config import *
+# 假設 server_config 存在，若無請自行定義或註解
+# from server_config import *
+# 為了讓程式能跑，這裡補上預設 config (若你有 server_config.py 可刪除這段)
+MAP_WIDTH = 2000
+MAP_HEIGHT = 2000
+PLAYER_LIVES = 3
+INVINCIBLE_TIME = 3
+MAX_ENEMIES = 50
+FIRE_COOLDOWN = 0.5
+WALL_CONFIG = {"width": 100, "height": 20, "hp": 50, "cooldown": 10, "duration": 20}
+CELL_CONFIG = {
+    1: {"hp": 10, "color": "red", "speed": 5},
+    2: {"hp": 10, "color": "green", "speed": 6},
+    3: {"hp": 10, "color": "blue", "speed": 4}
+}
+WEAPON_CONFIG = {
+    "default": {"damage": 1, "speed": 10, "size": 5, "angles": [-90], "type": "linear"},
+    "spread_lv1": {"damage": 1, "speed": 10, "size": 5, "angles": [-100, -80], "type": "linear"},
+    "spread_lv2": {"damage": 1, "speed": 10, "size": 5, "angles": [-110, -90, -70], "type": "linear"},
+}
+VIRUS_CONFIG = {
+    1: {"size": 30, "hp": 2, "speed": 2, "score": 10, "drop_rate": 0.1, "attack": {"fire_rate": 0.01, "damage": 1, "bullet_speed": 5, "mode": "single"}},
+    2: {"size": 40, "hp": 5, "speed": 1.5, "score": 20, "drop_rate": 0.2, "attack": {"fire_rate": 0.02, "damage": 2, "bullet_speed": 6, "mode": "double"}},
+    3: {"size": 50, "hp": 10, "speed": 1, "score": 50, "drop_rate": 0.3, "attack": {"fire_rate": 0.03, "damage": 3, "bullet_speed": 7, "mode": "single"}},
+    999: {"size": 100, "hp": 500, "speed": 1, "score": 1000, "drop_rate": 1.0, "kill_bonus": 5000, "attack": {"fire_rate": 0.1, "damage": 5, "bullet_speed": 8, "mode": "double"}}
+}
 
 def check_collision(obj1, obj2, r1_override=None, r2_override=None):
     # 支援字典或物件屬性存取
@@ -52,6 +77,12 @@ def check_rect_circle_collision(rect_obj, circle_obj, circle_r_override=None):
     distance_sq = (distance_x ** 2) + (distance_y ** 2)
 
     return distance_sq < (radius ** 2)
+
+class GameObject:
+    def __init__(self, x, y, size):
+        self.x = x
+        self.y = y
+        self.size = size
 
 class Wall(GameObject):
     def __init__(self, x, y, owner_id):
@@ -111,7 +142,7 @@ def compress_state(state):
         })
 
     for s in state["skill_objects"]:
-         compressed["skill_objects"].append({"x": int(s["x"]), "y": int(s["y"]), "skin": s["skin"]})
+        compressed["skill_objects"].append({"x": int(s["x"]), "y": int(s["y"]), "skin": s["skin"]})
 
     # 新增牆壁數據
     for w in state["walls"]:
@@ -121,12 +152,6 @@ def compress_state(state):
         })
 
     return compressed
-
-class GameObject:
-    def __init__(self, x, y, size):
-        self.x = x
-        self.y = y
-        self.size = size
 
 class Item(GameObject):
     def __init__(self, x, y, item_type):
@@ -221,7 +246,8 @@ class Bullet(GameObject):
         if self.b_type == "bounce" and self.bounce_left > 0:
             self.damage *= self.bounce_damage_mult
             self.bounce_left -= 1
-            self.ignore_list.append(target) # 短時間不打同一隻
+            if target:
+                self.ignore_list.append(target) # 短時間不打同一隻
             
             # 尋找最近的其他目標 (簡單的反彈邏輯：直接反轉或是隨機偏轉)
             # 這裡做簡單物理反彈：假設撞到圓形切線
@@ -303,10 +329,6 @@ class Player(GameObject):
         else:
             self.weapon_type = base_type
             self.weapon_level = 1
-        icons = {"spread": "🔱", "ricochet": "⚡", "arc": "🌙", "default": "🔥"}
-        self.weapon_icon = icons.get(base_type, "🔥")
-            
-        # 更新 Icon
         icons = {"spread": "🔱", "ricochet": "⚡", "arc": "🌙", "default": "🔥"}
         self.weapon_icon = icons.get(base_type, "🔥")
 
@@ -473,7 +495,7 @@ async def game_loop():
                     sfx_buffer.append({'type': 'powerup'}) # 假設前端有這音效
 
         # 4. 子彈移動與碰撞 
-       active_bullets = []
+        active_bullets = []
         for b in gs.bullets:
             still_alive = b.update()
             if not still_alive: continue
