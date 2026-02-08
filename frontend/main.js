@@ -69,20 +69,6 @@ function updateUI() {
     if (me.w_icon && fBtn.innerText !== me.w_icon) {
         fBtn.innerText = me.w_icon; 
     }
-    // 新增：更新牆壁按鈕 CD
-    const wCdEl = document.getElementById('wall-cd');
-    const wBtn = document.getElementById('wall-btn');
-    if (me.w_cd > 0) {
-        // 假設最大 CD 20秒
-        let pct = (me.w_cd / 20) * 100;
-        wCdEl.style.height = pct + '%';
-        wBtn.style.opacity = 0.5;
-        wBtn.innerText = me.w_cd;
-    } else {
-        wCdEl.style.height = '0%';
-        wBtn.style.opacity = 1.0;
-        wBtn.innerText = '🧱';
-    }
 }
 
 // 搖桿與操作
@@ -112,21 +98,6 @@ manager.on('move', (evt, data) => {
 manager.on('end', () => { 
     socket.emit('move', { dx: 0, dy: 0 }); 
     // 不重置 currentAimAngle，這樣玩家停下來時還能朝最後方向射擊
-});
-function doBuildWall() { socket.emit('build_wall'); } // 新增
-// 綁定事件
-document.getElementById('fire-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doFire(); });
-document.getElementById('fire-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doFire(); });
-document.getElementById('skill-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doSkill(); });
-document.getElementById('skill-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doSkill(); });
-// 新增 Wall 按鈕綁定
-document.getElementById('wall-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doBuildWall(); });
-document.getElementById('wall-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doBuildWall(); });
-
-document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') doFire();
-    if (e.key === 'q' || e.key === 'Q') doSkill();
-    if (e.key === 'e' || e.key === 'E') doBuildWall(); // 鍵盤 E 鍵蓋牆
 });
 
 function doFire() {
