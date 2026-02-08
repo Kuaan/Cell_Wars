@@ -57,19 +57,24 @@ function updateUI() {
     for(let i=1; i<=3; i++) {
         const elSeg = document.getElementById('seg'+i);
         const elFill = document.getElementById('fill'+i);
-        if (me.charge >= i) { elSeg.classList.add('full'); elFill.style.width = '100%'; }
-        else if (me.charge === i - 1) { elSeg.classList.remove('full'); elFill.style.width = ((me.hit_accumulated / 20) * 100) + '%'; }
-        else { elSeg.classList.remove('full'); elFill.style.width = '0%'; }
+        
+        if (me.charge >= i) { 
+            // 滿格狀態
+            elSeg.classList.add('full'); 
+            elFill.style.width = '100%'; 
+        }
+        else if (me.charge === i - 1) { 
+            // 正在充能的這一格：使用 ha (hit_accumulated) 計算百分比
+            // 後端傳來的 ha 為 0~20
+            elSeg.classList.remove('full'); 
+            let percent = ((me.ha || 0) / 20) * 100; 
+            elFill.style.width = percent + '%'; 
+        }
+        else { 
+            elSeg.classList.remove('full'); 
+            elFill.style.width = '0%'; 
+        }
     }
-    
-    const sBtn = document.getElementById('skill-btn');
-    if (me.charge >= 1) sBtn.classList.remove('disabled'); else sBtn.classList.add('disabled');
-
-    const fBtn = document.getElementById('fire-btn');
-    if (me.w_icon && fBtn.innerText !== me.w_icon) {
-        fBtn.innerText = me.w_icon; 
-    }
-}
 
 // 搖桿與操作
 let currentAimAngle = -90; // 預設向上
