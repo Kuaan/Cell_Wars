@@ -75,6 +75,7 @@ function updateUI() {
             elFill.style.width = '0%'; 
         }
     }
+}
 
 // 搖桿與操作
 let currentAimAngle = -90; // 預設向上
