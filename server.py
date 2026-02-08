@@ -1,4 +1,4 @@
-#<<<<<<<<<<<<<<<<<<<<<<<<5.0 server.py
+#<<<<<<<<<<<<<<<<<<<<<<<<5.1 server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -262,7 +262,7 @@ class Player(GameObject):
             self.weapon_level = 1
             
         # 更新 Icon
-        icons = {"spread": "🔱", "ricochet": "⚡", "arc": "🌙", "default": "🌕"}
+        icons = {"spread": "🔱", "ricochet": "⚡", "arc": "🫧", "default": "🌕"}
         self.weapon_icon = icons.get(base_type, "🌕")
 
     def get_shoot_config(self):
