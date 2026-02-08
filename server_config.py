@@ -1,4 +1,4 @@
-#<<<<<<<<<<<<<<<<<<<<<<<<<server_config.py v5.0
+#<<<<<<<<<<<<<<<<<<<<<<<<<server_config.py v5.1
 import math
 # --- 地圖與基礎設定 ---
 MAP_WIDTH = 600
@@ -75,5 +75,13 @@ WEAPON_CONFIG = {
         "fire_rate_mult": 0.6,
         "type": "arc", "angles": "random_45_135",
         "size_mult": 1.5, "range": MAP_HEIGHT * 0.5, "color": "#aa00aa"
+    }
+    # --- 牆壁設定 ---
+    WALL_CONFIG = {
+        "width": 75,
+        "height": 30,
+        "hp": 100,
+        "duration": 25,       # 存在時間 (秒)
+        "cooldown": 20        # 破壞/消失後的冷卻時間 (秒)
     }
 }
