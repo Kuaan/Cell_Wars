@@ -53,7 +53,31 @@ function draw() {
     // 4. 繪製玩家
     for (let id in gameState.players) {
         let p = gameState.players[id];
-        if (p.invincible) ctx.globalAlpha = 0.5;
+        
+        // 繪製護盾 (新增特效)
+        if (p.shield) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(p.x + 15, p.y + 15, 35, 0, Math.PI * 2); // 半徑比角色稍大
+            ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 + 0.3 * Math.sin(time * 0.01)})`; // 呼吸燈效果
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            ctx.fillStyle = `rgba(100, 200, 255, 0.1)`;
+            ctx.fill();
+            
+            // 護盾旋轉光環
+            ctx.translate(p.x + 15, p.y + 15);
+            ctx.rotate(time * 0.005);
+            ctx.beginPath();
+            ctx.arc(0, 0, 38, 0, Math.PI * 1.5); // 開口圓環
+            ctx.strokeStyle = "rgba(200, 255, 255, 0.6)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // 受傷閃爍 (無敵但非護盾狀態)
+        if (p.invincible && !p.shield) ctx.globalAlpha = 0.5;
         
         let img = skins.cells[(p.skin || 1) - 1];
         if(img && img.complete) ctx.drawImage(img, p.x, p.y, 30, 30);
