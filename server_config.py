@@ -18,9 +18,9 @@ CELL_CONFIG = {
 # --- 怪物設定 (Virus) ---
 # drop_rate: 掉落道具機率 (0~1)
 VIRUS_CONFIG = {
-    1: {"hp": 3, "speed": 3, "size": 50, "score": 10, "prob": 0.7, "drop_rate": 0.1,
+    1: {"hp": 3, "speed": 2, "size": 50, "score": 10, "prob": 0.7, "drop_rate": 0.1,
         "attack": {"mode": "single", "damage": 1, "bullet_speed": 8, "fire_rate": 0.005}},
-    2: {"hp": 1, "speed": 7, "size": 25, "score": 25, "prob": 0.2, "drop_rate": 0.15,
+    2: {"hp": 1, "speed": 5, "size": 25, "score": 25, "prob": 0.2, "drop_rate": 0.15,
         "attack": {"mode": "single", "damage": 1, "bullet_speed": 15, "fire_rate": 0.01}},
     3: {"hp": 15, "speed": 2, "size": 95, "score": 100, "prob": 0.1, "drop_rate": 0.5, # 菁英怪高掉落
         "attack": {"mode": "double", "damage": 2, "bullet_speed": 6, "fire_rate": 0.02}},
