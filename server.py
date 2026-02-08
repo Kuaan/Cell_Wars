@@ -247,7 +247,7 @@ class Player(GameObject):
     def reset_weapon(self):
         self.weapon_type = "default"
         self.weapon_level = 0
-        self.weapon_icon = "🔥"
+        self.weapon_icon = "🌕"
 
     def apply_item(self, item_type):
         # 簡單狀態機
@@ -262,8 +262,8 @@ class Player(GameObject):
             self.weapon_level = 1
             
         # 更新 Icon
-        icons = {"spread": "🔱", "ricochet": "⚡", "arc": "🌙", "default": "🔥"}
-        self.weapon_icon = icons.get(base_type, "🔥")
+        icons = {"spread": "🔱", "ricochet": "⚡", "arc": "🌙", "default": "🌕"}
+        self.weapon_icon = icons.get(base_type, "🌕")
 
     def get_shoot_config(self):
         # 根據當前狀態回傳子彈設定
