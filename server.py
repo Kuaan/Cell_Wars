@@ -366,6 +366,7 @@ class GameState:
         self.bullets = []
         self.items = []
         self.skill_objects = []
+        self.walls = []  # 新增
         self.warning_active = False
 
 gs = GameState()
@@ -410,6 +411,27 @@ async def game_loop():
              active_skills.append(obj)
         gs.skill_objects = active_skills
 
+        # --- 新增：牆壁更新邏輯 (放在 敵人生成 之前) ---
+        active_walls = []
+        for w in gs.walls:
+            # 檢查時間是否過期
+            if curr - w.created_at > WALL_CONFIG["duration"]:
+                # 時間到消失，設定 owner 的 CD 開始時間
+                if w.owner_id in gs.players:
+                    gs.players[w.owner_id].active_wall_id = None
+                    gs.players[w.owner_id].wall_destroyed_time = curr
+                continue # 移除
+                
+            # 檢查血量
+            if w.hp <= 0:
+                if w.owner_id in gs.players:
+                    gs.players[w.owner_id].active_wall_id = None
+                    gs.players[w.owner_id].wall_destroyed_time = curr
+                continue # 移除
+                
+            active_walls.append(w)
+        gs.walls = active_walls
+
         # 2. 敵人生成與 Boss 狀態機
         # 取得當前最高分
         max_score = max([p.score for p in gs.players.values()] or [0])
@@ -451,11 +473,27 @@ async def game_loop():
                     sfx_buffer.append({'type': 'powerup'}) # 假設前端有這音效
 
         # 4. 子彈移動與碰撞 
-        active_bullets = []
+       active_bullets = []
         for b in gs.bullets:
             still_alive = b.update()
             if not still_alive: continue
+            bullet_removed = False
+            # --- 新增：子彈打牆壁 ---
+            for w in gs.walls:
+                if check_rect_circle_collision(w, b):
+                    bullet_removed = True
+                    # 只有 "非玩家" (即敵人/Boss) 的子彈會傷害牆壁
+                    if b.owner_type != 'player':
+                        w.hp -= b.damage
+                        sfx_buffer.append({'type': 'wall_hit'}) # 需在前端加音效或忽略
+                    # 玩家子彈撞牆直接消失 (不穿透、不傷害)
+                    break 
+            
+            if bullet_removed:
+                continue # 子彈撞牆消失，跳過後續判定
+
             hit = False
+            
             # A. 玩家子彈打怪
             if b.owner_type == 'player':
                 for eid, enemy in list(gs.enemies.items()):
@@ -533,8 +571,20 @@ async def game_loop():
                     enemy.dx = random.choice([-2, -1, 0, 1, 2])
                     enemy.dy = random.choice([-1, 0, 1])
                     enemy.move_timer = 0
-                enemy.x = max(0, min(MAP_WIDTH - enemy.size, enemy.x + enemy.dx))
-                enemy.y = max(0, min(MAP_HEIGHT - enemy.size, enemy.y + enemy.dy))
+                    
+                # Boss 預判位置
+                next_x = max(0, min(MAP_WIDTH - enemy.size, enemy.x + enemy.dx))
+                next_y = max(0, min(MAP_HEIGHT - enemy.size, enemy.y + enemy.dy))
+                
+                # Boss 牆壁碰撞 (簡單處理：撞牆就不動)
+                collides_wall = False
+                temp_enemy = type('obj', (object,), {'x': next_x, 'y': next_y, 'size': enemy.size})
+                for w in gs.walls:
+                    if check_rect_circle_collision(w, temp_enemy):
+                        collides_wall = True; break
+                
+                if not collides_wall:
+                    enemy.x, enemy.y = next_x, next_y
                 
                 # Boss Fire
                 is_enraged = (enemy.hp < enemy.max_hp * 0.5)
@@ -552,8 +602,27 @@ async def game_loop():
                     sfx_buffer.append({'type': 'boss_shot'})
             
             else:
-                enemy.update() # 普通怪物移動
-                # 普通怪物撞人
+                # 普通怪物移動 原本: enemy.update() -> 拆解出來加入碰撞
+                prev_y = enemy.y
+                enemy.y += enemy.speed * 0.5
+                enemy.move_timer += 1
+                if enemy.move_timer > 30:
+                    enemy.x += random.choice([-20, 20, 0])
+                    enemy.move_timer = 0
+                enemy.x = max(0, min(MAP_WIDTH - enemy.size, enemy.x))
+                if enemy.y > MAP_HEIGHT: enemy.y = -50
+
+                # 怪物牆壁碰撞檢查
+                for w in gs.walls:
+                    if check_rect_circle_collision(w, enemy):
+                        # 撞牆回退簡單邏輯
+                        enemy.y = prev_y 
+                        # 嘗試繞開(簡單AI)：往中間靠
+                        if enemy.x < w.x: enemy.x -= 2
+                        else: enemy.x += 2
+                        break
+                
+                # ... (怪物撞人與射擊邏輯保持不變) ...
                 for pid, player in gs.players.items():
                     if player.is_invincible(): continue
                     if check_collision(player, enemy, r1_override=15):
@@ -578,14 +647,10 @@ async def game_loop():
                     # 計算射擊角度
                     angle_deg = 90 # 預設向下
                     if target:
-                        # 計算指向玩家的向量角度
                         dx = (target.x + 15) - cx
                         dy = (target.y + 15) - cy
-                        angle_rad = math.atan2(dy, dx)
-                        angle_deg = math.degrees(angle_rad)
-
+                        angle_deg = math.degrees(math.atan2(dy, dx))
                     bullets_pos = [{"x": cx-15, "y": cy}, {"x": cx+15, "y": cy}] if atk['mode'] == 'double' else [{"x": cx, "y": cy}]
-                    
                     for pos in bullets_pos:
                         b = Bullet(pos['x'], pos['y'], eid, "enemy", {"damage": atk['damage'], "speed": atk['bullet_speed']}, angle_deg=angle_deg)
                         gs.bullets.append(b)
@@ -594,7 +659,8 @@ async def game_loop():
         # 6. 發送狀態
         state_data = compress_state({
             "players": gs.players, "enemies": gs.enemies, "bullets": gs.bullets, 
-            "items": gs.items, "skill_objects": gs.skill_objects, "warning_active": gs.warning_active
+            "items": gs.items, "skill_objects": gs.skill_objects, "walls": gs.walls, # 傳入 walls
+            "warning_active": gs.warning_active
         })
         emit_tasks = [sio.emit('state_update', state_data)]
         
@@ -624,8 +690,46 @@ async def disconnect(sid):
 async def move(sid, data):
     if sid in gs.players:
         p = gs.players[sid]
-        p.x = max(0, min(MAP_WIDTH - 30, p.x + data.get('dx', 0) * p.stats['speed']))
-        p.y = max(0, min(MAP_HEIGHT - 30, p.y + data.get('dy', 0) * p.stats['speed']))
+        # 計算預期位置
+        next_x = max(0, min(MAP_WIDTH - 30, p.x + data.get('dx', 0) * p.stats['speed']))
+        next_y = max(0, min(MAP_HEIGHT - 30, p.y + data.get('dy', 0) * p.stats['speed']))
+        
+        # 牆壁碰撞檢查
+        collides = False
+        # 建立一個臨時物件來模擬移動後的位置
+        temp_player = type('obj', (object,), {'x': next_x, 'y': next_y, 'size': 30})
+        
+        for w in gs.walls:
+            if check_rect_circle_collision(w, temp_player):
+                collides = True
+                break
+        
+        if not collides:
+            p.x = next_x
+            p.y = next_y
+            
+@sio.event
+async def build_wall(sid):
+    if sid in gs.players:
+        p = gs.players[sid]
+        curr = time.time()
+        # 檢查是否已有牆壁
+        if p.active_wall_id is not None:
+            return # 已經有一道牆了  
+        # 檢查冷卻
+        time_since_destroyed = curr - p.wall_destroyed_time
+        if time_since_destroyed < WALL_CONFIG["cooldown"]:
+            return # CD 中
+            
+        # 生成牆壁 (在玩家當前位置)
+        wall = Wall(p.x - 20, p.y - 10, sid) # 稍微偏移讓玩家在牆的一側或中心
+        # 確保不出界
+        wall.x = max(0, min(MAP_WIDTH - wall.width, wall.x))
+        wall.y = max(0, min(MAP_HEIGHT - wall.height, wall.y))
+        
+        gs.walls.append(wall)
+        p.active_wall_id = wall.id
+        await sio.emit('sfx', {'type': 'skill_slime'}) # 借用一下技能音效
 
 @sio.event
 async def shoot(sid, data=None): # 修改：接收 data 參數
