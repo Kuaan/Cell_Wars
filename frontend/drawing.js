@@ -106,13 +106,15 @@ function draw() {
         if (b.c === '#ff00ff' || b.c==='#aa00aa' || b.c === 'rgb(255, 0, 255)') {
             ctx.save();
             ctx.translate(b.x, b.y);
-            ctx.rotate(time * 0.008); 
+            ctx.rotate(time * 0.005); 
+            
+            let scale = 1 + Math.sin(time * 0.01) * 0.1; 
+            ctx.scale(scale, scale);
             
             ctx.font = "30px sans-serif";
-            ctx.fillStyle = "#ff00ff";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText("🫧", 0, 0); 
+            ctx.fillText("🫧", 0, 0);
             
             ctx.restore();
         } else {
