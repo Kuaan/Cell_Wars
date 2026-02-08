@@ -482,11 +482,11 @@ async def game_loop():
             still_alive = b.update()
             if not still_alive: continue
             hit = False
+            bullet_survives = True # 預設存活
             # A. 玩家子彈打怪
             if b.owner_type == 'player':
                 for eid, enemy in list(gs.enemies.items()):
                     if enemy in b.ignore_list: continue # 彈射忽略
-
                     if check_collision(b, enemy):
                         enemy.hp -= b.damage
                         hit = True
@@ -498,7 +498,6 @@ async def game_loop():
                         # 處理玩家充能
                         if b.owner_id in gs.players:
                             p = gs.players[b.owner_id]
-                            
                             if p.charge < 3:
                                 p.hit_accumulated += 1
                                 if p.hit_accumulated >= 20:
@@ -510,7 +509,6 @@ async def game_loop():
                         # 怪物死亡
                         if enemy.hp <= 0:
                             if eid in gs.enemies:
-                                # 使用封裝好的邏輯
                                 on_enemy_killed(enemy, b.owner_id)
                                 del gs.enemies[eid]
                             break #
