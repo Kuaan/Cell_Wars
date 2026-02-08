@@ -50,6 +50,8 @@ def compress_state(state):
             "charge": p.charge, "c": p.color,
             "invincible": p.is_invincible(),
             "w_icon": p.weapon_icon # 用於前端顯示 FIRE 鍵圖騰
+            "ha": p.hit_accumulated,           # 新增：當前累積的充能打擊數 (用於前端百分比顯示)
+            "shield": (time.time() < p.shield_end_time) # 新增：告訴前端是否要畫盾
         }
     
     for eid, e in state["enemies"].items():
@@ -206,14 +208,16 @@ class Player(GameObject):
         self.last_hit_time = 0
         self.last_shot_time = 0
         self.last_skill_time = 0
+        self.shield_end_time = 0 # 新增：盾牌結束時間
         
         # 武器狀態
         self.weapon_level = 0
         self.weapon_type = "default" # default, spread, ricochet, arc
-        self.weapon_icon = "🔥" 
+        self.weapon_icon = "🌕" 
 
     def is_invincible(self):
-        return (time.time() - self.last_hit_time) < INVINCIBLE_TIME
+        now = time.time()
+        return (now - self.last_hit_time < INVINCIBLE_TIME) or (now < self.shield_end_time)
 
     def take_damage(self, amount):
         if self.is_invincible(): return False
@@ -630,18 +634,15 @@ async def shoot(sid, data=None): # 修改：接收 data 參數
 
 @sio.event
 async def use_skill(sid):
-    # 技能邏輯暫時保持原樣，因為需求主要在一般子彈
     if sid in gs.players:
         p = gs.players[sid]
         curr = time.time()
-        if p.charge >= 1 and (curr - p.last_skill_time > 2):
+        # 充能大於等於 1 且不在冷卻中 (這裡冷卻設短一點，因為主要限制是充能)
+        if p.charge >= 1:
             p.charge -= 1
-            p.last_skill_time = curr
-            gs.skill_objects.append({
-                "owner_id": sid, "x": p.x, "y": p.y, "size": 30, "damage": 1,
-                "durability": 10, "duration": 10, "start_time": curr, "angle_offset": 0, "skin": p.skin
-            })
-            await sio.emit('sfx', {'type': 'skill_slime'})
+            # 設定盾牌持續 5 秒
+            p.shield_end_time = curr + 5
+            await sio.emit('sfx', {'type': 'skill_slime'}) # 播放音效
 
 if __name__ == "__main__":
     uvicorn.run(socketio.ASGIApp(sio, app), host="0.0.0.0", port=8000)
