@@ -112,7 +112,7 @@ function draw() {
             ctx.fillStyle = "#ff00ff";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText("🎵", 0, 0); 
+            ctx.fillText("🫧", 0, 0); 
             
             ctx.restore();
         } else {
