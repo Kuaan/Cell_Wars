@@ -53,6 +53,58 @@ function draw() {
     // 4. 繪製玩家
     for (let id in gameState.players) {
         let p = gameState.players[id];
+        // --- 雷射特效邏輯 ---
+        // p.l_st (Laser State): 0=None, 1=Charging, 2=Firing
+        // p.l_t  (Laser Timer): 狀態開始的時間
+        // p.l_a  (Laser Angle): 角度
+        
+        if (p.l_st === 1) { // 蓄力中 (1秒)
+            let progress = (time - p.l_t) / 1000; // 0.0 ~ 1.0
+            if (progress < 1.0) {
+                ctx.save();
+                ctx.translate(p.x + 15, p.y + 15);
+                // 匯聚線條
+                for(let i=0; i<6; i++) {
+                    ctx.beginPath();
+                    let angle = (time * 0.01) + (i * 60 * Math.PI/180);
+                    let dist = 40 * (1 - progress);
+                    ctx.arc(Math.cos(angle)*dist, Math.sin(angle)*dist, 3, 0, Math.PI*2);
+                    ctx.fillStyle = `rgba(255, 184, 108, ${0.5 + progress*0.5})`;
+                    ctx.fill();
+                }
+                // 核心光球變大
+                ctx.beginPath();
+                ctx.arc(0, 0, 5 + 10 * progress, 0, Math.PI*2);
+                ctx.fillStyle = "#ffb86c";
+                ctx.fill();
+                ctx.restore();
+            }
+        } else if (p.l_st === 2) { // 發射中 (雷射光束)
+             // 雷射持續時間極短(例如 0.3秒)，這裡畫出光束
+             ctx.save();
+             ctx.translate(p.x + 15, p.y + 15);
+             ctx.rotate(p.l_a * Math.PI / 180); // 旋轉到發射角度
+             
+             // 光束外發光
+             ctx.beginPath();
+             ctx.moveTo(0, 0);
+             ctx.lineTo(800, 0); // 射程 800
+             ctx.lineWidth = 15;
+             ctx.strokeStyle = "rgba(255, 100, 100, 0.4)";
+             ctx.stroke();
+             
+             // 光束核心
+             ctx.beginPath();
+             ctx.moveTo(0, 0);
+             ctx.lineTo(800, 0);
+             ctx.lineWidth = 5;
+             ctx.strokeStyle = "#ffffff";
+             ctx.shadowColor = "#ff5555";
+             ctx.shadowBlur = 20;
+             ctx.stroke();
+             
+             ctx.restore();
+        }
         
         // 繪製護盾 (新增特效)
         if (p.shield) {
