@@ -1,4 +1,4 @@
-#<<<<<<<<<<<<<<<<<<<<<<<<5.0 server.py
+#<<<<<<<<<<<<<<<<<<<<<<<<5.1 server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -30,6 +30,40 @@ def check_collision(obj1, obj2, r1_override=None, r2_override=None):
     radius_sum_sq = (r1 + r2) ** 2
     return dist_sq < (radius_sum_sq * 0.8)
 
+def check_rect_circle_collision(rect_obj, circle_obj, circle_r_override=None):
+    """矩形(Wall) 與 圓形(Player/Enemy/Bullet) 的碰撞檢測"""
+    rx = rect_obj.x
+    ry = rect_obj.y
+    rw = rect_obj.width
+    rh = rect_obj.height
+    
+    cx = circle_obj.x if hasattr(circle_obj, 'x') else circle_obj['x']
+    cy = circle_obj.y if hasattr(circle_obj, 'y') else circle_obj['y']
+    size = circle_obj.size if hasattr(circle_obj, 'size') else circle_obj.get('size', 20)
+    radius = circle_r_override if circle_r_override is not None else size / 2
+
+    # 尋找矩形上距離圓心最近的點
+    closest_x = max(rx, min(cx, rx + rw))
+    closest_y = max(ry, min(cy, ry + rh))
+
+    # 計算距離
+    distance_x = cx - closest_x
+    distance_y = cy - closest_y
+    distance_sq = (distance_x ** 2) + (distance_y ** 2)
+
+    return distance_sq < (radius ** 2)
+
+class Wall(GameObject):
+    def __init__(self, x, y, owner_id):
+        super().__init__(x, y, 0) # Size 對矩形沒用，設 0
+        self.width = WALL_CONFIG["width"]
+        self.height = WALL_CONFIG["height"]
+        self.hp = WALL_CONFIG["hp"]
+        self.max_hp = WALL_CONFIG["hp"]
+        self.owner_id = owner_id
+        self.created_at = time.time()
+        self.id = str(uuid.uuid4())
+
 def get_distance(obj1, obj2):
     x1 = obj1.x if hasattr(obj1, 'x') else obj1['x']
     y1 = obj1.y if hasattr(obj1, 'y') else obj1['y']
@@ -40,16 +74,23 @@ def get_distance(obj1, obj2):
 def compress_state(state):
     compressed = {
         "players": {}, "enemies": {}, "bullets": [], 
-        "items": [], "skill_objects": [], "w": state["warning_active"]
+        "items": [], "skill_objects": [], "walls": [], "w": state["warning_active"]
     }
     
     for pid, p in state["players"].items():
+        # 計算牆壁 CD 剩餘時間 (用於前端顯示)
+        wall_cd = 0
+        if p.active_wall_id is None:
+            time_passed = time.time() - p.wall_destroyed_time
+            wall_cd = max(0, WALL_CONFIG["cooldown"] - time_passed)
+            
         compressed["players"][pid] = {
             "x": int(p.x), "y": int(p.y), "skin": p.skin, "name": p.name,
             "hp": max(0, int(p.hp)), "max_hp": int(p.max_hp), "score": int(p.score),
             "charge": p.charge, "c": p.color,
             "invincible": p.is_invincible(),
-            "w_icon": p.weapon_icon # 用於前端顯示 FIRE 鍵圖騰
+            "w_icon": p.weapon_icon,
+            "w_cd": int(wall_cd) # 傳送 CD 秒數
         }
     
     for eid, e in state["enemies"].items():
@@ -69,9 +110,15 @@ def compress_state(state):
             "x": int(i.x), "y": int(i.y), "type": i.item_type
         })
 
-    # Skill Objects (保留原本邏輯)
     for s in state["skill_objects"]:
          compressed["skill_objects"].append({"x": int(s["x"]), "y": int(s["y"]), "skin": s["skin"]})
+
+    # 新增牆壁數據
+    for w in state["walls"]:
+        compressed["walls"].append({
+            "x": int(w.x), "y": int(w.y), "w": w.width, "h": w.height, 
+            "hp": w.hp, "max_hp": w.max_hp
+        })
 
     return compressed
 
@@ -194,7 +241,7 @@ class Player(GameObject):
         self.name = name
         self.skin = skin_id
         self.stats = stats
-        self.hp = stats["hp"] * PLAYER_LIVES # 5條命總血量
+        self.hp = stats["hp"] * PLAYER_LIVES
         self.max_hp = stats["hp"] * PLAYER_LIVES
         self.lives_count = PLAYER_LIVES
         self.color = stats["color"]
@@ -207,10 +254,14 @@ class Player(GameObject):
         self.last_shot_time = 0
         self.last_skill_time = 0
         
+        # 牆壁機制
+        self.wall_destroyed_time = 0 # 記錄牆壁消失的時間，用於計算 CD
+        self.active_wall_id = None   # 當前存在的牆壁 ID
+        
         # 武器狀態
         self.weapon_level = 0
-        self.weapon_type = "default" # default, spread, ricochet, arc
-        self.weapon_icon = "🔥" 
+        self.weapon_type = "default"
+        self.weapon_icon = "🔥"
 
     def is_invincible(self):
         return (time.time() - self.last_hit_time) < INVINCIBLE_TIME
@@ -238,7 +289,7 @@ class Player(GameObject):
         self.lives_count = PLAYER_LIVES
         self.score = int(self.score / 2)
         self.charge = 0
-        self.reset_weapon()
+        self.reset_weapon() # 重生時不重置牆壁 CD，保持戰略性
 
     def reset_weapon(self):
         self.weapon_type = "default"
@@ -246,16 +297,14 @@ class Player(GameObject):
         self.weapon_icon = "🔥"
 
     def apply_item(self, item_type):
-        # 簡單狀態機
-        base_type = item_type.split('_')[0] # spread, ricochet...
-        
+        base_type = item_type.split('_')[0]
         if self.weapon_type.startswith(base_type):
-            # 同類別，升級
             self.weapon_level = min(2, self.weapon_level + 1)
         else:
-            # 不同類別，覆蓋且 Lv1
             self.weapon_type = base_type
             self.weapon_level = 1
+        icons = {"spread": "🔱", "ricochet": "⚡", "arc": "🌙", "default": "🔥"}
+        self.weapon_icon = icons.get(base_type, "🔥")
             
         # 更新 Icon
         icons = {"spread": "🔱", "ricochet": "⚡", "arc": "🌙", "default": "🔥"}
