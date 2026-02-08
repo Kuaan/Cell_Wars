@@ -75,6 +75,33 @@ function draw() {
         ctx.lineWidth = 1;
         ctx.strokeRect(p.x, p.y-10, 30, 4);
     }
+    if (gameState.walls) {
+        gameState.walls.forEach(w => {
+            ctx.save();
+            // 牆壁本體
+            ctx.fillStyle = "#6272a4"; // 灰藍色
+            ctx.fillRect(w.x, w.y, w.w, w.h);
+            
+            // 邊框
+            ctx.strokeStyle = "#f8f8f2";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(w.x, w.y, w.w, w.h);
+            
+            // 簡單的磚塊紋路
+            ctx.beginPath();
+            ctx.moveTo(w.x + w.w/2, w.y); ctx.lineTo(w.x + w.w/2, w.y + w.h);
+            ctx.moveTo(w.x, w.y + w.h/2); ctx.lineTo(w.x + w.w, w.y + w.h/2);
+            ctx.strokeStyle = "#44475a";
+            ctx.stroke();
+
+            // 血量條 (顯示在牆壁上方)
+            const hpRatio = w.hp / w.max_hp;
+            ctx.fillStyle = "#50fa7b";
+            ctx.fillRect(w.x, w.y - 6, w.w * hpRatio, 4);
+            
+            ctx.restore();
+        });
+    }
 
     // 5. 繪製子彈
     gameState.bullets.forEach(b => {
