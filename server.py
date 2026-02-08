@@ -427,10 +427,14 @@ async def game_loop():
                         # 處理玩家充能
                         if b.owner_id in gs.players:
                             p = gs.players[b.owner_id]
-                            p.hit_accumulated += 1
-                            if p.hit_accumulated >= 20:
+                            
+                            if p.charge < 3:
+                                p.hit_accumulated += 1
+                                if p.hit_accumulated >= 20:
+                                    p.hit_accumulated = 0
+                                    p.charge += 1
+                            else:
                                 p.hit_accumulated = 0
-                                p.charge = min(3, p.charge + 1)
 
                         # 怪物死亡
                         if enemy.hp <= 0:
