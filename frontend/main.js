@@ -1,4 +1,4 @@
-// frontend/main.js v5.1
+// frontend/main.js v5.2
 
 // 圖片載入
 const skins = { cells: [], viruses: [], boss: null };
@@ -126,6 +126,23 @@ document.getElementById('skill-btn').addEventListener('mousedown', (e) => { e.pr
 document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') doFire();
     if (e.key === 'q' || e.key === 'Q') doSkill();
+});
+
+function doLaser() {
+    // 檢查: 需要至少 1 格能量，且目前沒有在蓄力或發射中 (避免重複按) 依賴後端檢查，前端只做簡單防呆
+    if (gameState.players[myId] && gameState.players[myId].charge >= 1) {
+        socket.emit('use_laser', { angle: currentAimAngle });
+    }
+}
+
+document.getElementById('laser-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doLaser(); });
+document.getElementById('laser-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doLaser(); });
+
+// 增加鍵盤 E 鍵觸發
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') doFire();
+    if (e.key === 'q' || e.key === 'Q') doSkill();
+    if (e.key === 'e' || e.key === 'E') doLaser();
 });
 
 // 開始按鈕
