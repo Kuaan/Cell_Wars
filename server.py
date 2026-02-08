@@ -209,6 +209,10 @@ class Player(GameObject):
         self.last_shot_time = 0
         self.last_skill_time = 0
         self.shield_end_time = 0 # 新增：盾牌結束時間
+
+        self.laser_state = 0 # 0: None, 1: Charging, 2: Firing
+        self.laser_timer = 0
+        self.laser_angle = 0
         
         # 武器狀態
         self.weapon_level = 0
@@ -360,6 +364,42 @@ async def game_loop():
         curr = time.time()
         sfx_buffer = []
         active_skills = []
+        for pid, p in gs.players.items():
+            if p.laser_state == 1: # 蓄力中
+                if curr - p.laser_timer >= 1.0: # 1秒後發射
+                    p.laser_state = 2
+                    p.laser_timer = curr # 重設時間給發射動畫用
+                    
+                    # --- 雷射傷害邏輯 (Raycast) ---
+                    # 簡單算法：計算怪物是否在雷射矩形內
+                    lx, ly = p.x + 15, p.y + 15
+                    rad = math.radians(p.laser_angle)
+                    dir_x, dir_y = math.cos(rad), math.sin(rad)
+                    
+                    # 對所有怪物做判定
+                    for eid, enemy in list(gs.enemies.items()):
+                        ex, ey = enemy.x + enemy.size/2, enemy.y + enemy.size/2
+                        # 向量投影計算距離
+                        vx, vy = ex - lx, ey - ly
+                        proj = vx * dir_x + vy * dir_y
+                        
+                        if 0 < proj < 800: # 在射程 800 內
+                            # 計算垂直距離
+                            orth_dist = abs(vx * (-dir_y) + vy * dir_x)
+                            if orth_dist < (enemy.size/2 + 10): # 判定寬度
+                                enemy.hp -= 50 # 傷害 50
+                                sfx_buffer.append({'type': 'boss_hitted' if enemy.type==999 else 'enemy_hitted'})
+                                if enemy.hp <= 0:
+                                    # ... (複製原本的怪物死亡掉寶邏輯) ...
+                                    del gs.enemies[eid]
+                                    if p.sid in gs.players: gs.players[p.sid].score += enemy.score
+                                    spawn_item(enemy.x, enemy.y) # 這裡簡單寫，建議封裝死亡邏輯
+
+
+            elif p.laser_state == 2: # 發射動畫中
+                if curr - p.laser_timer >= 0.3: # 動畫持續 0.3 秒
+                    p.laser_state = 0
+                    
         for obj in gs.skill_objects:
              if curr - obj["start_time"] > obj["duration"]: continue
              active_skills.append(obj)
@@ -647,6 +687,19 @@ async def use_skill(sid):
             # 設定盾牌持續 5 秒
             p.shield_end_time = curr + 5
             await sio.emit('sfx', {'type': 'skill_slime'}) # 播放音效
+            
+@sio.event
+async def use_laser(sid, data):
+    if sid in gs.players:
+        p = gs.players[sid]
+        # 扣除能量與檢查冷卻
+        if p.charge >= 1 and p.laser_state == 0:
+            p.charge -= 1
+            p.laser_state = 1 # 開始蓄力
+            p.laser_timer = time.time()
+            p.laser_angle = data.get('angle', -90) # 鎖定發射時的角度
+            # 播放蓄力音效 (可以複用 skill 音效或新增)
+            await sio.emit('sfx', {'type': 'skill_slime'})
 
 if __name__ == "__main__":
     uvicorn.run(socketio.ASGIApp(sio, app), host="0.0.0.0", port=8000)
