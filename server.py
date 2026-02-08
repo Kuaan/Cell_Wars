@@ -49,7 +49,7 @@ def compress_state(state):
             "hp": max(0, int(p.hp)), "max_hp": int(p.max_hp), "score": int(p.score),
             "charge": p.charge, "c": p.color,
             "invincible": p.is_invincible(),
-            "w_icon": p.weapon_icon # 用於前端顯示 FIRE 鍵圖騰
+            "w_icon": p.weapon_icon, # 用於前端顯示 FIRE 鍵圖騰
             "ha": p.hit_accumulated,           # 新增：當前累積的充能打擊數 (用於前端百分比顯示)
             "shield": (time.time() < p.shield_end_time) # 新增：告訴前端是否要畫盾
         }
