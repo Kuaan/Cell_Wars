@@ -358,35 +358,6 @@ def spawn_item(x, y, forced_type=None):
     itype = forced_type if forced_type else random.choice(types)
     gs.items.append(Item(x, y, itype))
 
-def on_enemy_killed(enemy, killer_id):
-    """當怪物死亡時觸發的統一邏輯"""
-    # 1. 掉寶
-    if random.random() < enemy.prob_drop:
-        spawn_item(enemy.x, enemy.y)
-    
-    # 2. 加分
-    if killer_id in gs.players:
-        player = gs.players[killer_id]
-        player.score += enemy.score
-        if enemy.type == 999:
-            player.score += VIRUS_CONFIG[999].get("kill_bonus", 1000)
-
-    # 3. 狀態機轉換 (核心修正)
-    if enemy.type == 999: # 魔王死了
-        game_vars["boss_phase"] = "collecting"
-        game_vars["elite_kill_count"] = 0
-        gs.warning_active = False
-        print("Boss defeated! Phase changed to: collecting")
-    
-    elif enemy.type == 3: # 精英怪死了
-        if game_vars["boss_phase"] == "collecting":
-            game_vars["elite_kill_count"] += 1
-            print(f"Elite killed: {game_vars['elite_kill_count']}/{game_vars['target_kills']}")
-            if game_vars["elite_kill_count"] >= game_vars["target_kills"]:
-                game_vars["boss_phase"] = "warning"
-                game_vars["phase_start_time"] = time.time()
-                gs.warning_active = True
-
 # --- 主遊戲迴圈 ---
 async def game_loop():
     timer = LoopTimer(fps=30)
@@ -402,6 +373,7 @@ async def game_loop():
                     p.laser_state = 2
                     p.laser_timer = curr # 重設時間給發射動畫用
                     
+                    # --- 雷射傷害邏輯 (Raycast) ---
                     # 簡單算法：計算怪物是否在雷射矩形內
                     lx, ly = p.x + 15, p.y + 15
                     rad = math.radians(p.laser_angle)
@@ -417,14 +389,32 @@ async def game_loop():
                         if 0 < proj < 800: # 在射程 800 內
                             # 計算垂直距離
                             orth_dist = abs(vx * (-dir_y) + vy * dir_x)
-                            
-                            if orth_dist < (enemy.size/2 + 10): 
-                                enemy.hp -= 50 
+                            if orth_dist < (enemy.size/2 + 10): # 判定寬度
+                                enemy.hp -= 50 # 傷害 50
                                 sfx_buffer.append({'type': 'boss_hitted' if enemy.type==999 else 'enemy_hitted'})
+                                #laser kill
                                 if enemy.hp <= 0:
-                                    # 使用封裝好的邏輯
-                                    on_enemy_killed(enemy, p.sid) 
                                     if eid in gs.enemies: del gs.enemies[eid]
+                                    if p.sid in gs.players:
+                                        gs.players[p.sid].score += enemy.score
+                                        if enemy.type == 999: # 魔王額外加分
+                                            gs.players[p.sid].score += VIRUS_CONFIG[999].get("kill_bonus", 0)
+                                    
+                                    if random.random() < enemy.prob_drop:
+                                        spawn_item(enemy.x, enemy.y)
+
+                                    # 3. 【關鍵：階段轉換邏輯】補上這裡進度才會繼續
+                                    if enemy.type == 3: # 精英怪
+                                        if game_vars["boss_phase"] == "collecting":
+                                            game_vars["elite_kill_count"] += 1
+                                            if game_vars["elite_kill_count"] >= game_vars["target_kills"]:
+                                                game_vars["boss_phase"] = "warning"
+                                                game_vars["phase_start_time"] = time.time()
+                                                gs.warning_active = True
+                                    elif enemy.type == 999: # 魔王死亡
+                                        game_vars["boss_phase"] = "collecting"
+                                        game_vars["elite_kill_count"] = 0
+                                        gs.warning_active = False
 
 
             elif p.laser_state == 2: # 發射動畫中
@@ -462,7 +452,7 @@ async def game_loop():
         if len(gs.enemies) < MAX_ENEMIES and game_vars["boss_phase"] != "boss_active":
             rand_val = random.random()
             # 根據狀態調整精英怪出現機率
-            v_type = 3 if rand_val < 0.2 else (2 if rand_val < 0.5 else 1)
+            v_type = 3 if rand_val < 0.15 else (2 if rand_val < 0.4 else 1)
             enemy = Enemy(v_type)
             gs.enemies[enemy.id] = enemy
 
@@ -482,11 +472,11 @@ async def game_loop():
             still_alive = b.update()
             if not still_alive: continue
             hit = False
-            bullet_survives = True # 預設存活
             # A. 玩家子彈打怪
             if b.owner_type == 'player':
                 for eid, enemy in list(gs.enemies.items()):
                     if enemy in b.ignore_list: continue # 彈射忽略
+
                     if check_collision(b, enemy):
                         enemy.hp -= b.damage
                         hit = True
@@ -498,6 +488,7 @@ async def game_loop():
                         # 處理玩家充能
                         if b.owner_id in gs.players:
                             p = gs.players[b.owner_id]
+                            
                             if p.charge < 3:
                                 p.hit_accumulated += 1
                                 if p.hit_accumulated >= 20:
@@ -508,10 +499,9 @@ async def game_loop():
 
                         # 怪物死亡
                         if enemy.hp <= 0:
-                            if eid in gs.enemies:
-                                on_enemy_killed(enemy, b.owner_id)
-                                del gs.enemies[eid]
-                            break #
+                            if eid in gs.enemies: del gs.enemies[eid]
+                            if random.random() < enemy.prob_drop:
+                                spawn_item(enemy.x, enemy.y)
                                 
                             # 分數邏輯
                             if b.owner_id in gs.players:
