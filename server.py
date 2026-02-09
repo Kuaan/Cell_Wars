@@ -1,4 +1,4 @@
-#<<<<<<<<<<<<<<<<<<<<<<<<5.2 server.py
+#<<<<<<<<<<<<<<<<<<<<<<<<5.2.1 server.py
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -10,8 +10,14 @@ import uuid
 
 from server_config import *
 
+# --- 工具函式優化 ---
+
+def clamp(val, min_v, max_v):
+    """限制數值在範圍內"""
+    return max(min_v, min(max_v, val))
+
 def check_collision(obj1, obj2, r1_override=None, r2_override=None):
-    # 支援字典或物件屬性存取
+    # 支援字典或物件屬性存取 (邏輯不變，僅排版微調)
     x1 = obj1.x if hasattr(obj1, 'x') else obj1['x']
     y1 = obj1.y if hasattr(obj1, 'y') else obj1['y']
     size1 = obj1.size if hasattr(obj1, 'size') else obj1.get('size', 20)
@@ -23,10 +29,7 @@ def check_collision(obj1, obj2, r1_override=None, r2_override=None):
     r1 = r1_override if r1_override is not None else size1 / 2
     r2 = r2_override if r2_override is not None else size2 / 2
 
-    cx1, cy1 = x1 + r1, y1 + r1
-    cx2, cy2 = x2 + r2, y2 + r2
-
-    dist_sq = (cx1 - cx2) ** 2 + (cy1 - cy2) ** 2
+    dist_sq = (x1 + r1 - (x2 + r2)) ** 2 + (y1 + r1 - (y2 + r2)) ** 2
     radius_sum_sq = (r1 + r2) ** 2
     return dist_sq < (radius_sum_sq * 0.8)
 
@@ -49,11 +52,11 @@ def compress_state(state):
             "hp": max(0, int(p.hp)), "max_hp": int(p.max_hp), "score": int(p.score),
             "charge": p.charge, "c": p.color,
             "invincible": p.is_invincible(),
-            "w_icon": p.weapon_icon, # 用於前端顯示 FIRE 鍵圖騰
-            "ha": p.hit_accumulated,           # 新增：當前累積的充能打擊數 (用於前端百分比顯示)
-            "shield": (time.time() < p.shield_end_time), # 新增：告訴前端是否要畫盾
-            "l_st": p.laser_state, # 新增
-            "l_t": int(p.laser_timer * 1000), # 轉毫秒
+            "w_icon": p.weapon_icon,
+            "ha": p.hit_accumulated,
+            "shield": (time.time() < p.shield_end_time),
+            "l_st": p.laser_state,
+            "l_t": int(p.laser_timer * 1000),
             "l_a": int(p.laser_angle)
         }
     
@@ -74,7 +77,6 @@ def compress_state(state):
             "x": int(i.x), "y": int(i.y), "type": i.item_type
         })
 
-    # Skill Objects (保留原本邏輯)
     for s in state["skill_objects"]:
          compressed["skill_objects"].append({"x": int(s["x"]), "y": int(s["y"]), "skin": s["skin"]})
 
@@ -88,10 +90,10 @@ class GameObject:
 
 class Item(GameObject):
     def __init__(self, x, y, item_type):
-        super().__init__(x, y, 20) # 膠囊大小
+        super().__init__(x, y, 20)
         self.id = str(uuid.uuid4())
-        self.item_type = item_type # 'spread', 'ricochet', 'arc', 'heal'
-        self.dy = 2 # 道具緩慢下落
+        self.item_type = item_type
+        self.dy = 2
         
     def update(self):
         self.y += self.dy
@@ -102,35 +104,30 @@ class Bullet(GameObject):
         size = config.get("size", 5)
         super().__init__(x, y, size)
         self.owner_id = owner_id
-        self.owner_type = owner_type # 'player', 'enemy', 'boss'
+        self.owner_type = owner_type
         self.damage = config.get("damage", 1)
         self.color = config.get("color", None)
         self.config = config
         
-        # 運動邏輯
         self.speed = config.get("speed", 10)
         self.b_type = config.get("type", "linear")
         
-        # 計算向量
         angle_rad = math.radians(angle_deg if angle_deg is not None else -90)
         self.dx = math.cos(angle_rad) * self.speed
         self.dy = math.sin(angle_rad) * self.speed
         
-        # 特殊屬性
         self.bounce_left = config.get("bounce", 0)
         self.bounce_damage_mult = config.get("bounce_damage", 0.3)
         self.range_limit = config.get("range", 9999)
         self.dist_traveled = 0
-        self.ignore_list = [] # 彈射時避免重複打同一隻
+        self.ignore_list = []
         
-        # 弧射參數
         if self.b_type == "arc":
             self.arc_angle = 0
             self.curve_dir = random.choice([-1, 1])
 
     def update(self):
         if self.b_type == "arc":
-            # 弧形運動：在原向量基礎上疊加切線運動
             self.x += self.dx + (math.cos(time.time() * 5) * 5 * self.curve_dir)
             self.y += self.dy
         else:
@@ -139,53 +136,38 @@ class Bullet(GameObject):
             
         self.dist_traveled += self.speed
         
-        # 邊界反彈 (彈射屬性)
         if self.b_type == "bounce" and self.bounce_left > 0:
             hit_wall = False
             
-            # X 軸邊界檢查
-            if self.x <= 0:
-                self.x = 0             # 強制推回邊界內 (防黏牆)
-                self.dx *= -1          # 反轉 X 速度
-                hit_wall = True
-            elif self.x >= MAP_WIDTH:
-                self.x = MAP_WIDTH     # 強制推回邊界內
+            # 使用新的 clamp 邏輯雖然可以限制位置，但反彈需要知道撞到哪邊
+            # 這裡維持原邏輯，但位置修正部分可以簡化
+            if self.x <= 0 or self.x >= MAP_WIDTH:
+                self.x = clamp(self.x, 0, MAP_WIDTH)
                 self.dx *= -1
                 hit_wall = True
             
-            # Y 軸邊界檢查 (修正：補上 MAP_HEIGHT 判定)
-            if self.y <= 0:
-                self.y = 0             # 強制推回
-                self.dy *= -1          # 反轉 Y 速度
-                hit_wall = True
-            elif self.y >= MAP_HEIGHT: # 新增：底部邊界判定
-                self.y = MAP_HEIGHT    # 強制推回
+            if self.y <= 0 or self.y >= MAP_HEIGHT:
+                self.y = clamp(self.y, 0, MAP_HEIGHT)
                 self.dy *= -1
                 hit_wall = True
             
             if hit_wall:
                 self.bounce_left -= 1
-                return True # 成功反彈，保持存活
+                return True
                 
-        # 射程限制
         if self.dist_traveled > self.range_limit:
             return False
 
-        # 一般邊界檢查
         return -50 <= self.x <= MAP_WIDTH + 50 and -50 <= self.y <= MAP_HEIGHT + 50
 
     def handle_hit(self, target):
-        """處理命中後的邏輯 (回傳 False 代表子彈消失, True 代表子彈繼續)"""
         if self.b_type == "bounce" and self.bounce_left > 0:
             self.damage *= self.bounce_damage_mult
             self.bounce_left -= 1
-            self.ignore_list.append(target) # 短時間不打同一隻
+            self.ignore_list.append(target)
             
-            # 尋找最近的其他目標 (簡單的反彈邏輯：直接反轉或是隨機偏轉)
-            # 這裡做簡單物理反彈：假設撞到圓形切線
             self.dx *= -1 
             self.dy *= -1 
-            # 為了避免黏在敵人身上，稍微推開
             self.x += self.dx * 2
             self.y += self.dy * 2
             return True
@@ -199,7 +181,7 @@ class Player(GameObject):
         self.name = name
         self.skin = skin_id
         self.stats = stats
-        self.hp = stats["hp"] * PLAYER_LIVES # 5條命總血量
+        self.hp = stats["hp"] * PLAYER_LIVES
         self.max_hp = stats["hp"] * PLAYER_LIVES
         self.lives_count = PLAYER_LIVES
         self.color = stats["color"]
@@ -207,19 +189,17 @@ class Player(GameObject):
         self.charge = 0
         self.hit_accumulated = 0
         
-        # 狀態
         self.last_hit_time = 0
         self.last_shot_time = 0
         self.last_skill_time = 0
-        self.shield_end_time = 0 # 新增：盾牌結束時間
+        self.shield_end_time = 0
 
-        self.laser_state = 0 # 0: None, 1: Charging, 2: Firing
+        self.laser_state = 0
         self.laser_timer = 0
         self.laser_angle = 0
         
-        # 武器狀態
         self.weapon_level = 0
-        self.weapon_type = "default" # default, spread, ricochet, arc
+        self.weapon_type = "default"
         self.weapon_icon = "🌕" 
 
     def is_invincible(self):
@@ -231,14 +211,12 @@ class Player(GameObject):
         self.hp -= amount
         self.last_hit_time = time.time()
         
-        # 死亡判定 (扣命模擬)
         unit_hp = self.stats["hp"]
         current_lives = math.ceil(self.hp / unit_hp)
         
         if self.hp <= 0:
             self.respawn()
         elif current_lives < self.lives_count:
-             # 掉了一條命但還沒死透，重置武器
              self.reset_weapon()
              self.lives_count = current_lives
         return True
@@ -257,23 +235,18 @@ class Player(GameObject):
         self.weapon_icon = "🌕"
 
     def apply_item(self, item_type):
-        # 簡單狀態機
-        base_type = item_type.split('_')[0] # spread, ricochet...
+        base_type = item_type.split('_')[0]
         
         if self.weapon_type.startswith(base_type):
-            # 同類別，升級
             self.weapon_level = min(2, self.weapon_level + 1)
         else:
-            # 不同類別，覆蓋且 Lv1
             self.weapon_type = base_type
             self.weapon_level = 1
             
-        # 更新 Icon
         icons = {"spread": "🔱", "ricochet": "⚡", "arc": "🫧", "default": "🌕"}
         self.weapon_icon = icons.get(base_type, "🌕")
 
     def get_shoot_config(self):
-        # 根據當前狀態回傳子彈設定
         key = "default"
         if self.weapon_type != "default":
             key = f"{self.weapon_type}_lv{self.weapon_level}"
@@ -295,16 +268,16 @@ class Enemy(GameObject):
         self.dy = 0
         
     def update(self):
-        # 簡單 AI 移動邏輯 (Boss 會有 Server 端額外控制，這裡處理基本移動)
         if self.type == 999: # Boss
-            pass # 由 Server 主控
+            pass 
         else:
             self.y += self.speed * 0.5
             self.move_timer += 1
             if self.move_timer > 30:
                 self.x += random.choice([-20, 20, 0])
                 self.move_timer = 0
-            self.x = max(0, min(MAP_WIDTH - self.size, self.x))
+            # 使用 clamp 優化
+            self.x = clamp(self.x, 0, MAP_WIDTH - self.size)
             if self.y > MAP_HEIGHT: self.y = -50
 
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
@@ -313,14 +286,13 @@ sio_app = socketio.ASGIApp(sio, app)
 
 # --- 全域狀態 ---
 game_vars = {
-    "boss_phase": "initial", # 初始狀態
+    "boss_phase": "initial",
     "phase_start_time": 0,
     "elite_kill_count": 0,
-    "target_kills": 5,        # 測試用設 5，正式可改回 10
-    "boss_score_threshold": 500 # 分數達到 500 啟動第一次魔王
+    "target_kills": 5,
+    "boss_score_threshold": 500
 }
 
-# 使用物件管理 State
 class GameState:
     def __init__(self):
         self.players = {}
@@ -358,6 +330,37 @@ def spawn_item(x, y, forced_type=None):
     itype = forced_type if forced_type else random.choice(types)
     gs.items.append(Item(x, y, itype))
 
+# --- 新增：怪物死亡處理函式 (優化核心) ---
+def handle_enemy_death(eid, enemy, killer_id):
+    """處理怪物死亡的所有邏輯：移除、加分、掉寶、階段轉換"""
+    # 1. 移除
+    if eid in gs.enemies: 
+        del gs.enemies[eid]
+    
+    # 2. 分數與擊殺判定
+    if killer_id in gs.players:
+        p = gs.players[killer_id]
+        p.score += enemy.score
+        if enemy.type == 999: # Boss Kill Bonus
+            p.score += VIRUS_CONFIG[999].get("kill_bonus", 0)
+
+    # 3. 掉寶
+    if random.random() < enemy.prob_drop:
+        spawn_item(enemy.x, enemy.y)
+
+    # 4. 階段轉換邏輯
+    if enemy.type == 3: # Elite
+        if game_vars["boss_phase"] == "collecting":
+            game_vars["elite_kill_count"] += 1
+            if game_vars["elite_kill_count"] >= game_vars["target_kills"]:
+                game_vars["boss_phase"] = "warning"
+                game_vars["phase_start_time"] = time.time()
+                gs.warning_active = True
+    elif enemy.type == 999: # Boss Died
+        game_vars["boss_phase"] = "collecting"
+        game_vars["elite_kill_count"] = 0
+        gs.warning_active = False
+
 # --- 主遊戲迴圈 ---
 async def game_loop():
     timer = LoopTimer(fps=30)
@@ -367,58 +370,35 @@ async def game_loop():
         curr = time.time()
         sfx_buffer = []
         active_skills = []
+        
+        # 1. 玩家雷射邏輯
         for pid, p in gs.players.items():
-            if p.laser_state == 1: # 蓄力中
-                if curr - p.laser_timer >= 1.0: # 1秒後發射
+            if p.laser_state == 1:
+                if curr - p.laser_timer >= 1.0:
                     p.laser_state = 2
-                    p.laser_timer = curr # 重設時間給發射動畫用
+                    p.laser_timer = curr
                     
-                    # --- 雷射傷害邏輯 (Raycast) ---
-                    # 簡單算法：計算怪物是否在雷射矩形內
                     lx, ly = p.x + 15, p.y + 15
                     rad = math.radians(p.laser_angle)
                     dir_x, dir_y = math.cos(rad), math.sin(rad)
                     
-                    # 對所有怪物做判定
                     for eid, enemy in list(gs.enemies.items()):
                         ex, ey = enemy.x + enemy.size/2, enemy.y + enemy.size/2
-                        # 向量投影計算距離
                         vx, vy = ex - lx, ey - ly
                         proj = vx * dir_x + vy * dir_y
                         
-                        if 0 < proj < 800: # 在射程 800 內
-                            # 計算垂直距離
+                        if 0 < proj < 800:
                             orth_dist = abs(vx * (-dir_y) + vy * dir_x)
-                            if orth_dist < (enemy.size/2 + 10): # 判定寬度
-                                enemy.hp -= 50 # 傷害 50
+                            if orth_dist < (enemy.size/2 + 10):
+                                enemy.hp -= 50
                                 sfx_buffer.append({'type': 'boss_hitted' if enemy.type==999 else 'enemy_hitted'})
-                                #laser kill
+                                
+                                # 使用封裝後的死亡處理
                                 if enemy.hp <= 0:
-                                    if eid in gs.enemies: del gs.enemies[eid]
-                                    if p.sid in gs.players:
-                                        gs.players[p.sid].score += enemy.score
-                                        if enemy.type == 999: # 魔王額外加分
-                                            gs.players[p.sid].score += VIRUS_CONFIG[999].get("kill_bonus", 0)
-                                    
-                                    if random.random() < enemy.prob_drop:
-                                        spawn_item(enemy.x, enemy.y)
+                                    handle_enemy_death(eid, enemy, p.sid)
 
-                                    # 3. 【關鍵：階段轉換邏輯】補上這裡進度才會繼續
-                                    if enemy.type == 3: # 精英怪
-                                        if game_vars["boss_phase"] == "collecting":
-                                            game_vars["elite_kill_count"] += 1
-                                            if game_vars["elite_kill_count"] >= game_vars["target_kills"]:
-                                                game_vars["boss_phase"] = "warning"
-                                                game_vars["phase_start_time"] = time.time()
-                                                gs.warning_active = True
-                                    elif enemy.type == 999: # 魔王死亡
-                                        game_vars["boss_phase"] = "collecting"
-                                        game_vars["elite_kill_count"] = 0
-                                        gs.warning_active = False
-
-
-            elif p.laser_state == 2: # 發射動畫中
-                if curr - p.laser_timer >= 0.3: # 動畫持續 0.3 秒
+            elif p.laser_state == 2:
+                if curr - p.laser_timer >= 0.3:
                     p.laser_state = 0
                     
         for obj in gs.skill_objects:
@@ -427,44 +407,39 @@ async def game_loop():
         gs.skill_objects = active_skills
 
         # 2. 敵人生成與 Boss 狀態機
-        # 取得當前最高分
         max_score = max([p.score for p in gs.players.values()] or [0])
 
-        # --- 狀態轉換邏輯 ---條件 A: 分數達標 OR 條件 B: 已經殺了一些小怪 (這裡用分數判定)
         if game_vars["boss_phase"] == "initial":
             if max_score >= game_vars["boss_score_threshold"]:
                 game_vars["boss_phase"] = "countdown"
                 game_vars["phase_start_time"] = curr
 
         elif game_vars["boss_phase"] == "countdown":
-            if curr - game_vars["phase_start_time"] > 25:  # 倒數 25 秒準備進入警告
+            if curr - game_vars["phase_start_time"] > 25:
                 game_vars["boss_phase"] = "warning"
                 game_vars["phase_start_time"] = curr
                 gs.warning_active = True
                 sfx_buffer.append({'type': 'boss_coming'})
 
         elif game_vars["boss_phase"] == "warning":
-            if curr - game_vars["phase_start_time"] > 5: # 警告 5 秒後正式出生
+            if curr - game_vars["phase_start_time"] > 5:
                 spawn_boss()
                 sfx_buffer.append({'type': 'boss_coming'})
 
-        # --- 敵人生成控制 ---只有在非 Boss 戰期間才生成普通小怪
         if len(gs.enemies) < MAX_ENEMIES and game_vars["boss_phase"] != "boss_active":
             rand_val = random.random()
-            # 根據狀態調整精英怪出現機率
             v_type = 3 if rand_val < 0.15 else (2 if rand_val < 0.4 else 1)
             enemy = Enemy(v_type)
             gs.enemies[enemy.id] = enemy
 
         # 3. 道具移動
         gs.items = [i for i in gs.items if i.update()]
-        # 玩家吃道具
         for pid, player in gs.players.items():
             for item in gs.items[:]:
                 if check_collision(player, item):
                     player.apply_item(item.item_type)
                     gs.items.remove(item)
-                    sfx_buffer.append({'type': 'powerup'}) # 假設前端有這音效
+                    sfx_buffer.append({'type': 'powerup'})
 
         # 4. 子彈移動與碰撞 
         active_bullets = []
@@ -472,23 +447,21 @@ async def game_loop():
             still_alive = b.update()
             if not still_alive: continue
             hit = False
+            
             # A. 玩家子彈打怪
             if b.owner_type == 'player':
                 for eid, enemy in list(gs.enemies.items()):
-                    if enemy in b.ignore_list: continue # 彈射忽略
+                    if enemy in b.ignore_list: continue
 
                     if check_collision(b, enemy):
                         enemy.hp -= b.damage
                         hit = True
                         sfx_buffer.append({'type': 'boss_hitted' if enemy.type == 999 else 'enemy_hitted'})
                         
-                        # 處理彈射
                         bullet_survives = b.handle_hit(enemy)
                         
-                        # 處理玩家充能
                         if b.owner_id in gs.players:
                             p = gs.players[b.owner_id]
-                            
                             if p.charge < 3:
                                 p.hit_accumulated += 1
                                 if p.hit_accumulated >= 20:
@@ -497,32 +470,11 @@ async def game_loop():
                             else:
                                 p.hit_accumulated = 0
 
-                        # 怪物死亡
+                        # 使用封裝後的死亡處理
                         if enemy.hp <= 0:
-                            if eid in gs.enemies: del gs.enemies[eid]
-                            if random.random() < enemy.prob_drop:
-                                spawn_item(enemy.x, enemy.y)
-                                
-                            # 分數邏輯
-                            if b.owner_id in gs.players:
-                                gs.players[b.owner_id].score += enemy.score
-                                if enemy.type == 999: # Boss Kill
-                                    gs.players[b.owner_id].score += VIRUS_CONFIG[999]["kill_bonus"]
+                            handle_enemy_death(eid, enemy, b.owner_id)
 
-                            # Boss 階段邏輯
-                            if enemy.type == 3: # Elite
-                                if game_vars["boss_phase"] == "collecting":
-                                    game_vars["elite_kill_count"] += 1
-                                    if game_vars["elite_kill_count"] >= game_vars["target_kills"]:
-                                        game_vars["boss_phase"] = "warning"
-                                        game_vars["phase_start_time"] = time.time()
-                                        gs.warning_active = True
-                            elif enemy.type == 999:
-                                game_vars["boss_phase"] = "collecting"
-                                game_vars["elite_kill_count"] = 0
-                                gs.warning_active = False
-
-                        if not bullet_survives: break # 子彈消失
+                        if not bullet_survives: break 
 
             # B. 怪物子彈打人
             else:
@@ -533,13 +485,10 @@ async def game_loop():
                         is_dead = player.take_damage(b.damage)
                         hit = True
                         sfx_buffer.append({'type': 'character_hitted'})
-                        if is_dead:
-                             # 重生已在 take_damage 處理
-                             pass 
                         break
 
             if not hit or (hit and b.b_type == "bounce" and b.bounce_left >= 0):
-                if not (hit and not b.handle_hit(None)): # 如果命中了且不是反彈子彈，就不要加入 active
+                if not (hit and not b.handle_hit(None)):
                     active_bullets.append(b)
 
         gs.bullets = active_bullets
@@ -552,10 +501,11 @@ async def game_loop():
                     enemy.dx = random.choice([-2, -1, 0, 1, 2])
                     enemy.dy = random.choice([-1, 0, 1])
                     enemy.move_timer = 0
-                enemy.x = max(0, min(MAP_WIDTH - enemy.size, enemy.x + enemy.dx))
-                enemy.y = max(0, min(MAP_HEIGHT - enemy.size, enemy.y + enemy.dy))
                 
-                # Boss Fire
+                # 使用 clamp 優化 Boss 移動限制
+                enemy.x = clamp(enemy.x + enemy.dx, 0, MAP_WIDTH - enemy.size)
+                enemy.y = clamp(enemy.y + enemy.dy, 0, MAP_HEIGHT - enemy.size)
+                
                 is_enraged = (enemy.hp < enemy.max_hp * 0.5)
                 fire_rate = 0.05 if is_enraged else 0.03
                 if random.random() < fire_rate:
@@ -564,15 +514,13 @@ async def game_loop():
                         [(0, 10), (0, -10)] if (boss_shoot_toggle := boss_shoot_toggle + 1) % 2 == 0 else [(10, 0), (-10, 0)])
                     
                     for dx, dy in configs:
-                        # 這裡 Boss 子彈也可以用 Bullet Class，但為了簡化先手動塞
                         b = Bullet(cx, cy, "boss", "boss", {"damage":1, "speed":0, "size":10})
-                        b.dx, b.dy = dx, dy # 覆蓋向量
+                        b.dx, b.dy = dx, dy
                         gs.bullets.append(b)
                     sfx_buffer.append({'type': 'boss_shot'})
             
             else:
                 enemy.update() # 普通怪物移動
-                # 普通怪物撞人
                 for pid, player in gs.players.items():
                     if player.is_invincible(): continue
                     if check_collision(player, enemy, r1_override=15):
@@ -580,12 +528,10 @@ async def game_loop():
                             player.take_damage(1)
                             sfx_buffer.append({'type': 'character_hitted'})
                 
-                # 普通怪物射擊 (優化版：瞄準最近玩家)
                 atk = VIRUS_CONFIG[enemy.type]['attack']
                 if random.random() < atk['fire_rate']:
                     cx, cy = enemy.x + enemy.size/2, enemy.y + enemy.size
                     
-                    # 尋找最近的玩家
                     target = None
                     min_dist = 9999
                     for p in gs.players.values():
@@ -594,14 +540,11 @@ async def game_loop():
                             min_dist = d
                             target = p
                     
-                    # 計算射擊角度
-                    angle_deg = 90 # 預設向下
+                    angle_deg = 90
                     if target:
-                        # 計算指向玩家的向量角度
                         dx = (target.x + 15) - cx
                         dy = (target.y + 15) - cy
-                        angle_rad = math.atan2(dy, dx)
-                        angle_deg = math.degrees(angle_rad)
+                        angle_deg = math.degrees(math.atan2(dy, dx))
 
                     bullets_pos = [{"x": cx-15, "y": cy}, {"x": cx+15, "y": cy}] if atk['mode'] == 'double' else [{"x": cx, "y": cy}]
                     
@@ -643,46 +586,36 @@ async def disconnect(sid):
 async def move(sid, data):
     if sid in gs.players:
         p = gs.players[sid]
-        p.x = max(0, min(MAP_WIDTH - 30, p.x + data.get('dx', 0) * p.stats['speed']))
-        p.y = max(0, min(MAP_HEIGHT - 30, p.y + data.get('dy', 0) * p.stats['speed']))
+        # 使用 clamp 優化玩家移動限制
+        p.x = clamp(p.x + data.get('dx', 0) * p.stats['speed'], 0, MAP_WIDTH - 30)
+        p.y = clamp(p.y + data.get('dy', 0) * p.stats['speed'], 0, MAP_HEIGHT - 30)
 
 @sio.event
-async def shoot(sid, data=None): # 修改：接收 data 參數
+async def shoot(sid, data=None):
     if sid in gs.players:
         p = gs.players[sid]
         curr = time.time()
         
-        # 根據武器類型調整射速
         w_conf = p.get_shoot_config()
         cooldown = FIRE_COOLDOWN / w_conf.get("fire_rate_mult", 1.0)
         
         if curr - p.last_shot_time < cooldown: return
         p.last_shot_time = curr
 
-        # 決定基礎瞄準角度 (若前端有傳來 angle 則使用，否則預設 -90 向上)
         base_angle = -90
         if data and isinstance(data, dict) and 'angle' in data:
             base_angle = data['angle']
 
-        # 產生子彈 (支援散射/特殊發射)
-        # 邏輯：將武器設定的固定角度視為「相對角度」，加上玩家目前的瞄準角度
         conf_angles = w_conf["angles"]
         
-        if isinstance(conf_angles, list): # 固定角度 (一般/散射)
-            # 判斷是否為預設武器(單發)，如果是，直接用瞄準角度
-            # 如果是散射(多發)，我們假設 [-20, -90, -160] 這種設定是相對於 "前方(-90)" 的偏移
-            # 計算偏移量： config_angle - (-90)
-            
+        if isinstance(conf_angles, list):
             for conf_angle in conf_angles:
-                # 簡單化處理：如果只有一發且是 -90，直接用 base_angle
                 if len(conf_angles) == 1 and conf_angle == -90:
                     final_angle = base_angle
                 else:
-                    # 散射邏輯：計算相對偏移。假設 -90 是正前方
                     offset = conf_angle - (-90) 
                     final_angle = base_angle + offset
                 
-                # 計算發射位置 (稍微往子彈方向偏移一點，避免重疊在身體裡)
                 rad = math.radians(final_angle)
                 offset_x = math.cos(rad) * 20
                 offset_y = math.sin(rad) * 20
@@ -690,8 +623,7 @@ async def shoot(sid, data=None): # 修改：接收 data 參數
                 b = Bullet(p.x + 15 + offset_x, p.y + 15 + offset_y, sid, "player", w_conf, angle_deg=final_angle)
                 gs.bullets.append(b)
                 
-        elif conf_angles == "random_45_135": # 弧射 (特殊技能)
-            # 在瞄準方向左右 45 度內隨機
+        elif conf_angles == "random_45_135":
             angle = base_angle + random.uniform(-45, 45)
             b = Bullet(p.x + 15, p.y, sid, "player", w_conf, angle_deg=angle)
             gs.bullets.append(b)
@@ -701,24 +633,20 @@ async def use_skill(sid):
     if sid in gs.players:
         p = gs.players[sid]
         curr = time.time()
-        # 充能大於等於 1 且不在冷卻中 (這裡冷卻設短一點，因為主要限制是充能)
         if p.charge >= 1:
             p.charge -= 1
-            # 設定盾牌持續 5 秒
             p.shield_end_time = curr + 5
-            await sio.emit('sfx', {'type': 'skill_slime'}) # 播放音效
+            await sio.emit('sfx', {'type': 'skill_slime'})
             
 @sio.event
 async def use_laser(sid, data):
     if sid in gs.players:
         p = gs.players[sid]
-        # 扣除能量與檢查冷卻
         if p.charge >= 1 and p.laser_state == 0:
             p.charge -= 1
-            p.laser_state = 1 # 開始蓄力
+            p.laser_state = 1
             p.laser_timer = time.time()
-            p.laser_angle = data.get('angle', -90) # 鎖定發射時的角度
-            # 播放蓄力音效 (可以複用 skill 音效或新增)
+            p.laser_angle = data.get('angle', -90)
             await sio.emit('sfx', {'type': 'skill_slime'})
 
 if __name__ == "__main__":
