@@ -5,14 +5,135 @@
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
     <style>
-        /* CSS 將會注入這裡 */
+        /* frontend/style.css v5.3 - Layout & Logic Update */
+        * { box-sizing: border-box; }
+
+        body { 
+            background-color: #0d0211; color: #fff; margin: 0; padding: 0;
+            font-family: 'Courier New', monospace; overflow: hidden; 
+            display: flex; flex-direction: column; align-items: center;
+            height: 100vh; width: 100vw;
+        }
+
+        /* --- 登入介面 --- */
+        #login-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #0d0211; z-index: 99999; 
+            display: flex; flex-direction: column; align-items: center; 
+            justify-content: flex-start; padding-top: 20%;
+        }
+        #login-box {
+            background: #1a0620; padding: 30px; border-radius: 15px;
+            border: 2px solid #50fa7b; text-align: center; width: 85%; max-width: 400px;
+        }
+        input { margin: 15px 0; padding: 12px; font-size: 18px; width: 100%; text-align: center; background: #222; color: #fff; border: 1px solid #444; border-radius: 8px; }
+        button { padding: 15px 40px; font-size: 18px; background: #50fa7b; color: #000; border: none; border-radius: 8px; font-weight: bold; width: 100%; cursor: pointer; transition: 0.3s; }
+        button:disabled { background: #555; color: #888; cursor: not-allowed; }
+
+        /* --- 頂部狀態欄 --- */
+        #top-bar {
+            width: 100%; background: #1a0620; padding: 5px 0;
+            display: flex; justify-content: space-around; align-items: center;
+            border-bottom: 1px solid #bd93f9; font-size: 12px;
+            height: 40px; flex-shrink: 0;
+        }
+        .vol-control { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #bd93f9; }
+        input[type=range] { width: 50px; cursor: pointer; }
+
+        /* --- 遊戲畫布 --- */
+        canvas { 
+            background-color: #000; border: 2px solid #444; 
+            width: 95vw; max-width: 600px; height: auto; aspect-ratio: 6/5;
+            image-rendering: pixelated; margin-top: 5px;
+        }
+
+        /* --- 操作介面容器 --- */
+        #ui-container {
+            width: 100%; max-width: 600px; height: 180px;
+            margin-top: 10px; display: flex; justify-content: space-between;
+            align-items: center; padding: 0 15px;
+        }
+        #joystick-zone { width: 140px; height: 140px; position: relative; }
+
+        /* 動作區：維持能量條在上，按鈕在下 */
+        #actions-zone { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: flex-end; 
+            gap: 5px; 
+        }
+
+        /* --- 能量條樣式 --- */
+        #charge-container { display: flex; gap: 4px; margin-bottom: 5px; }
+        .charge-bar-segment { width: 25px; height: 10px; background: #333; transform: skewX(-15deg); position: relative; }
+        .charge-fill { position: absolute; left: 0; top: 0; height: 100%; background: #f1fa8c; width: 0%; transition: width 0.2s; }
+        /* 當該格充滿時的樣式 */
+        .charge-bar-segment.active .charge-fill { width: 100%; box-shadow: 0 0 5px #f1fa8c; }
+
+        /* --- 按鈕佈局優化 (Claw Layout Fixed) --- */
+        .button-layout {
+            position: relative;
+            width: 170px;  /* 稍微加寬 */
+            height: 150px; /* 加高：解決重疊關鍵 (80px射擊 + 55px雷射 + 15px間距) */
+        }
+
+        .btn-fire {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            width: 80px; height: 80px; 
+            background: #ff5555; border-radius: 50%;
+            border: 3px solid #ff9999; display: flex; align-items: center; justify-content: center;
+            font-weight: bold; font-size: 30px; 
+            box-shadow: 0 4px 0 #b30000; touch-action: none; user-select: none;
+            z-index: 10;
+            transition: transform 0.1s;
+        }
+        .btn-fire:active { box-shadow: 0 0 0; transform: translateY(4px); }
+
+        .btn-skill {
+            position: absolute;
+            width: 55px; height: 55px; 
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; font-weight: bold; color: #000; 
+            touch-action: none; user-select: none;
+            transition: transform 0.1s, opacity 0.3s, filter 0.3s;
+        }
+        .btn-skill:active { transform: scale(0.9); }
+        
+        /* 變更：使用 filter 來做灰階，亮起時移除 filter */
+        .btn-skill.disabled { 
+            opacity: 0.5; 
+            filter: grayscale(100%);
+            cursor: not-allowed;
+        }
+
+        /* 護盾按鈕：左下角 */
+        #skill-btn {
+            background: #8be9fd;
+            border: 3px solid #50fa7b;
+            left: 0;
+            bottom: 10px; /* 稍微對齊射擊按鈕中心 */
+        }
+
+        /* 雷射按鈕：右上角 (修正重疊) */
+        #laser-btn {
+            background: #ffb86c;
+            border: 3px solid #ff9a3c;
+            right: 5px;   /* 稍微往內縮，讓手指更容易按到 */
+            top: 0;       /* 貼齊容器頂部 */
+            box-shadow: 0 4px 0 #b36b1d;
+        }
+        #laser-btn:active { box-shadow: 0 0 0; transform: translateY(4px); }
+
         {style} 
     </style>
 </head>
 <body>
     <div id="login-overlay">
         <div id="login-box">
-            <h1 style="color: #50fa7b; margin: 0 0 10px 0;">CELL WARS v5.2</h1>
+            <h1 style="color: #50fa7b; margin: 0 0 10px 0;">CELL WARS v5.3</h1>
             <p style="color: #aaa; font-size: 12px;">🦠 Fighting !!!</p>
             <input type="text" id="name-input" placeholder="輸入名稱" maxlength="8">
             <button id="start-btn" disabled>資源載入中...</button>
@@ -29,7 +150,7 @@
 
     <div id="ui-container">
         <div id="joystick-zone"></div>
-       <div id="actions-zone">
+        <div id="actions-zone">
             <div id="charge-container">
                 <div class="charge-bar-segment" id="seg1"><div class="charge-fill" id="fill1"></div></div>
                 <div class="charge-bar-segment" id="seg2"><div class="charge-fill" id="fill2"></div></div>
@@ -45,19 +166,12 @@
     </div>
 
     <script>
-        // 定義全域常數，讓注入的 JS 檔案可以使用
         const SERVER_URL = "{server_url}";
         const ASSETS_BASE = "{assets_base}";
         const SOUNDS_BASE = "{sounds_base}";
         
-        // 依序注入程式碼
-        // 1. 音效邏輯 (定義 audioCtx, playSfx)
         {audio_js}
-
-        // 2. 繪圖邏輯 (定義 draw)
         {drawing_js}
-
-        // 3. 主邏輯 (啟動 socket, 監聽事件)
         {main_js}
     </script>
 </body>
