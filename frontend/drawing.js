@@ -1,4 +1,4 @@
-// frontend/drawing.js v5.2
+// frontend/drawing.js v5.3
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const time = Date.now();
@@ -54,9 +54,6 @@ function draw() {
     for (let id in gameState.players) {
         let p = gameState.players[id];
         // --- 雷射特效邏輯 ---
-        // p.l_st (Laser State): 0=None, 1=Charging, 2=Firing
-        // p.l_t  (Laser Timer): 狀態開始的時間
-        // p.l_a  (Laser Angle): 角度
         
         if (p.l_st === 1) { // 蓄力中 (1秒)
             let progress = (time - p.l_t) / 1000; // 0.0 ~ 1.0
@@ -80,15 +77,14 @@ function draw() {
                 ctx.restore();
             }
         } else if (p.l_st === 2) { // 發射中 (雷射光束)
-             // 雷射持續時間極短(例如 0.3秒)，這裡畫出光束
              ctx.save();
              ctx.translate(p.x + 15, p.y + 15);
-             ctx.rotate(p.l_a * Math.PI / 180); // 旋轉到發射角度
+             ctx.rotate(p.l_a * Math.PI / 180); 
              
              // 光束外發光
              ctx.beginPath();
              ctx.moveTo(0, 0);
-             ctx.lineTo(800, 0); // 射程 800
+             ctx.lineTo(800, 0); 
              ctx.lineWidth = 15;
              ctx.strokeStyle = "rgba(255, 100, 100, 0.4)";
              ctx.stroke();
@@ -106,12 +102,12 @@ function draw() {
              ctx.restore();
         }
         
-        // 繪製護盾 (新增特效)
+        // 繪製護盾
         if (p.shield) {
             ctx.save();
             ctx.beginPath();
-            ctx.arc(p.x + 15, p.y + 15, 35, 0, Math.PI * 2); // 半徑比角色稍大
-            ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 + 0.3 * Math.sin(time * 0.01)})`; // 呼吸燈效果
+            ctx.arc(p.x + 15, p.y + 15, 35, 0, Math.PI * 2); 
+            ctx.strokeStyle = `rgba(100, 200, 255, ${0.5 + 0.3 * Math.sin(time * 0.01)})`; 
             ctx.lineWidth = 3;
             ctx.stroke();
             ctx.fillStyle = `rgba(100, 200, 255, 0.1)`;
@@ -121,14 +117,14 @@ function draw() {
             ctx.translate(p.x + 15, p.y + 15);
             ctx.rotate(time * 0.005);
             ctx.beginPath();
-            ctx.arc(0, 0, 38, 0, Math.PI * 1.5); // 開口圓環
+            ctx.arc(0, 0, 38, 0, Math.PI * 1.5); 
             ctx.strokeStyle = "rgba(200, 255, 255, 0.6)";
             ctx.lineWidth = 2;
             ctx.stroke();
             ctx.restore();
         }
 
-        // 受傷閃爍 (無敵但非護盾狀態)
+        // 受傷閃爍
         if (p.invincible && !p.shield) ctx.globalAlpha = 0.5;
         
         let img = skins.cells[(p.skin || 1) - 1];
@@ -154,7 +150,6 @@ function draw() {
 
     // 5. 繪製子彈
     gameState.bullets.forEach(b => {
-        // 檢查是否為 Arc 子彈 (紫色 #ff00ff)
         if (b.c === '#ff00ff' || b.c==='#aa00aa' || b.c === 'rgb(255, 0, 255)') {
             ctx.save();
             ctx.translate(b.x, b.y);
@@ -170,7 +165,6 @@ function draw() {
             
             ctx.restore();
         } else {
-            // 一般子彈
             ctx.beginPath();
             if (b.c) {
                 ctx.fillStyle = b.c;
