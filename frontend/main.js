@@ -1,5 +1,4 @@
-// frontend/main.js v5.2
-
+// frontend/main.js v5.3 - UI Logic Update
 // 圖片載入
 const skins = { cells: [], viruses: [], boss: null };
 function loadImg(path) {
@@ -24,7 +23,7 @@ let lastShotTime = 0;
 
 socket.on('connect', () => { myId = socket.id; });
 
-// 接收音效指令 (調用 audio.js 裡的 playSfx)
+// 接收音效指令
 socket.on('sfx', (data) => {
     switch(data.type) {
         case 'character_hitted': playSfx('p_hit'); break;
@@ -41,39 +40,53 @@ socket.on('sfx', (data) => {
 // 更新畫面
 socket.on('state_update', (data) => {
     gameState = data;
-    requestAnimationFrame(draw); // draw() 在 drawing.js 定義
+    requestAnimationFrame(draw); 
     updateUI();
 });
 
+// --- UI 更新邏輯 (核心修改) ---
 function updateUI() {
     if (!myId || !gameState.players[myId]) return;
     const me = gameState.players[myId];
     
-    // 排行榜
+    // 1. 排行榜
     const sorted = Object.values(gameState.players).sort((a,b)=>b.score-a.score).slice(0,3);
     document.getElementById('lb-content').innerHTML = sorted.map((p, i) => `<span class="score-pill">${i==0?'👑':''}${p.name}:${p.score}</span>`).join('');
 
-    // 能量條
+    // 2. 能量條顯示
     for(let i=1; i<=3; i++) {
         const elSeg = document.getElementById('seg'+i);
         const elFill = document.getElementById('fill'+i);
         
         if (me.charge >= i) { 
             // 滿格狀態
-            elSeg.classList.add('full'); 
+            elSeg.classList.add('active'); // 配合 CSS v5.3 修改 class 名稱
             elFill.style.width = '100%'; 
         }
         else if (me.charge === i - 1) { 
-            // 正在充能的這一格：使用 ha (hit_accumulated) 計算百分比
-            // 後端傳來的 ha 為 0~20
-            elSeg.classList.remove('full'); 
+            // 正在充能的這一格
+            elSeg.classList.remove('active'); 
             let percent = ((me.ha || 0) / 20) * 100; 
             elFill.style.width = percent + '%'; 
         }
         else { 
-            elSeg.classList.remove('full'); 
+            elSeg.classList.remove('active'); 
             elFill.style.width = '0%'; 
         }
+    }
+
+    // 3. 按鈕狀態控制 (新功能)
+    // 只要有 1 格能量，護盾與雷射按鈕都亮起
+    const hasEnergy = me.charge >= 1;
+    const skillBtn = document.getElementById('skill-btn');
+    const laserBtn = document.getElementById('laser-btn');
+
+    if (hasEnergy) {
+        skillBtn.classList.remove('disabled');
+        laserBtn.classList.remove('disabled');
+    } else {
+        skillBtn.classList.add('disabled');
+        laserBtn.classList.add('disabled');
     }
 }
 
@@ -90,12 +103,7 @@ const manager = nipplejs.create({
 
 manager.on('move', (evt, data) => { 
     if(data.vector) {
-        // NippleJS 的 vector.y 向上是正，但 Canvas 座標向下是正，所以 dy 取負
         socket.emit('move', { dx: data.vector.x, dy: -data.vector.y });
-        
-        // 計算角度 (Degree)
-        // Math.atan2(y, x) 回傳弧度，轉換為角度
-        // 注意：這裡我們用 -data.vector.y 來符合螢幕座標系 (上為負)
         const angleRad = Math.atan2(-data.vector.y, data.vector.x);
         currentAimAngle = angleRad * (180 / Math.PI);
     }
@@ -103,43 +111,46 @@ manager.on('move', (evt, data) => {
 
 manager.on('end', () => { 
     socket.emit('move', { dx: 0, dy: 0 }); 
-    // 不重置 currentAimAngle，這樣玩家停下來時還能朝最後方向射擊
 });
 
 function doFire() {
     const now = Date.now();
     if (now - lastShotTime < 150) return;
     lastShotTime = now;
-    
-    // 發送射擊指令，帶上角度
     socket.emit('shoot', { angle: currentAimAngle });
     playSfx('p_shot');
 }
 
-function doSkill() { socket.emit('use_skill'); }
-
-document.getElementById('fire-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doFire(); });
-document.getElementById('fire-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doFire(); });
-document.getElementById('skill-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doSkill(); });
-document.getElementById('skill-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doSkill(); });
-
-document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') doFire();
-    if (e.key === 'q' || e.key === 'Q') doSkill();
-});
+function doSkill() { 
+    // 前端簡單檢查：有能量才發送
+    if (gameState.players[myId] && gameState.players[myId].charge >= 1) {
+        socket.emit('use_skill'); 
+    }
+}
 
 function doLaser() {
-    // 檢查: 需要至少 1 格能量，且目前沒有在蓄力或發射中 (避免重複按) 依賴後端檢查，前端只做簡單防呆
+    // 前端簡單檢查：有能量才發送
     if (gameState.players[myId] && gameState.players[myId].charge >= 1) {
         socket.emit('use_laser', { angle: currentAimAngle });
     }
 }
 
-document.getElementById('laser-btn').addEventListener('touchstart', (e) => { e.preventDefault(); doLaser(); });
-document.getElementById('laser-btn').addEventListener('mousedown', (e) => { e.preventDefault(); doLaser(); });
+// 綁定觸控與滑鼠事件
+const fireBtn = document.getElementById('fire-btn');
+fireBtn.addEventListener('touchstart', (e) => { e.preventDefault(); doFire(); });
+fireBtn.addEventListener('mousedown', (e) => { e.preventDefault(); doFire(); });
 
-// 增加鍵盤 E 鍵觸發
+const skillBtn = document.getElementById('skill-btn');
+skillBtn.addEventListener('touchstart', (e) => { e.preventDefault(); doSkill(); });
+skillBtn.addEventListener('mousedown', (e) => { e.preventDefault(); doSkill(); });
+
+const laserBtn = document.getElementById('laser-btn');
+laserBtn.addEventListener('touchstart', (e) => { e.preventDefault(); doLaser(); });
+laserBtn.addEventListener('mousedown', (e) => { e.preventDefault(); doLaser(); });
+
+// 鍵盤綁定
 document.addEventListener('keydown', (e) => {
+    if (e.repeat) return; // 避免長按重複觸發
     if (e.code === 'Space') doFire();
     if (e.key === 'q' || e.key === 'Q') doSkill();
     if (e.key === 'e' || e.key === 'E') doLaser();
