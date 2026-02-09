@@ -1,4 +1,4 @@
-/* frontend/style.css v5.3.0 - Small Screen Ergonomic Layout */
+/* frontend/style.css v5.3.2 - Skill Row Layout */
 * { box-sizing: border-box; }
 
 body { 
@@ -38,7 +38,7 @@ canvas {
     image-rendering: pixelated; margin-top: 5px;
 }
 
-/* --- 操作介面核心優化 --- */
+/* --- [修改] 操作介面容器 --- */
 #ui-container {
     width: 100%; max-width: 600px; height: 180px;
     margin-top: 10px; display: flex; justify-content: space-between;
@@ -46,75 +46,55 @@ canvas {
 }
 #joystick-zone { width: 140px; height: 140px; position: relative; }
 
+/* --- [修改] 動作區：改為垂直堆疊兩排 --- */
 #actions-zone { 
     display: flex; 
     flex-direction: column; 
     align-items: flex-end; 
-    gap: 5px; 
+    gap: 15px; /* 上下排的間距 */
 }
 
-/* --- 能量條：滿格與亮起樣式 --- */
-#charge-container { display: flex; gap: 4px; margin-bottom: 10px; }
-.charge-bar-segment { width: 25px; height: 10px; background: #333; transform: skewX(-15deg); position: relative; }
-.charge-fill { position: absolute; left: 0; top: 0; height: 100%; background: #f1fa8c; width: 0%; transition: width 0.2s; }
+/* --- [新增] 第一排：技能列佈局 --- */
+.skill-row {
+    display: flex;
+    align-items: center;
+    gap: 12px; /* 能量條、護盾、雷射之間的間距 */
+}
 
-/* 只要有值就閃爍提示 (Optional) */
+/* --- [修改] 能量條微調 --- */
+#charge-container { display: flex; gap: 4px; }
+.charge-bar-segment { width: 22px; height: 12px; background: #333; transform: skewX(-15deg); position: relative; }
+.charge-fill { position: absolute; left: 0; top: 0; height: 100%; background: #f1fa8c; width: 0%; transition: width 0.2s; }
 .full .charge-fill { width: 100%; box-shadow: 0 0 8px #f1fa8c; }
 
-/* --- 按鈕位置重新規劃 --- */
-#actions-zone > div:last-child {
-    position: relative;
-    width: 180px; /* 增加寬度讓按鈕可以往左排 */
-    height: 140px;
-}
-
-.btn-fire {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    width: 85px; height: 85px; 
-    background: #ff5555; border-radius: 50%;
-    border: 3px solid #ff9999; display: flex; align-items: center; justify-content: center;
-    font-weight: bold; font-size: 32px; 
-    box-shadow: 0 5px 0 #b30000; touch-action: none; user-select: none;
-    z-index: 10;
-}
-.btn-fire:active { box-shadow: 0 0 0; transform: translateY(5px); }
-
+/* --- [修改] 技能按鈕：移除絕對定位，改用 Flex --- */
 .btn-skill {
-    position: absolute;
-    width: 58px; height: 58px; 
+    width: 55px; height: 55px; 
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     font-size: 22px; font-weight: bold; color: #000; 
     touch-action: none; user-select: none;
     transition: all 0.2s;
-    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5));
+    box-shadow: 0 4px 0 rgba(0,0,0,0.5);
+    position: relative; /* 確保不被覆蓋 */
 }
 
-/* 💥 雷射按鈕：大幅往左移，並浮在上方 */
-#laser-btn {
-    background: #ffb86c;
-    border: 3px solid #ff9a3c;
-    right: 100px; /* 遠離射擊鈕 */
-    top: 5px;
-    box-shadow: 0 4px 0 #b36b1d;
+#skill-btn { background: #8be9fd; border: 3px solid #50fa7b; }
+#laser-btn { background: #ffb86c; border: 3px solid #ff9a3c; }
+
+/* --- [新增] 第二排：開火按鈕 --- */
+.fire-row {
+    padding-right: 5px;
 }
 
-/* 🛡️ 護盾按鈕：在雷射下方，形成垂直技能列 */
-#skill-btn {
-    background: #8be9fd;
-    border: 3px solid #50fa7b;
-    right: 110px; /* 稍微再往左一點，符合手指弧度 */
-    bottom: 0px;
-    box-shadow: 0 4px 0 #2d826a;
+.btn-fire {
+    width: 85px; height: 85px; 
+    background: #ff5555; border-radius: 50%;
+    border: 3px solid #ff9999; display: flex; align-items: center; justify-content: center;
+    font-weight: bold; font-size: 32px; 
+    box-shadow: 0 6px 0 #b30000; touch-action: none; user-select: none;
 }
 
-.btn-skill:active { transform: scale(0.9); box-shadow: 0 0 0; }
-
-/* 亮起邏輯樣式 */
-.btn-skill.disabled { 
-    opacity: 0.2; 
-    filter: grayscale(1); 
-    pointer-events: none; /* 灰掉時不可點擊 */
-}
+/* 狀態效果 */
+.btn-skill:active, .btn-fire:active { transform: translateY(4px); box-shadow: 0 0 0; }
+.btn-skill.disabled { opacity: 0.2; filter: grayscale(1); pointer-events: none; }
